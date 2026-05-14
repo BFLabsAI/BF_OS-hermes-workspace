@@ -1,0 +1,15 @@
+{
+  "name": "hermes-tmux-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing the Hermes Workspace tmux multiplexer to MCP-compatible clients (Claude Code, etc).",
+  "type": "module",
+  "bin": {
+    "hermes-tmux-mcp": "./index.mjs"
+  },
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  }
+}

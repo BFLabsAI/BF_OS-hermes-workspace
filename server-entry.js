@@ -1,8 +1,18 @@
 import { createServer } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
 import { join, extname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { register } from 'node:module'
 import server from './dist/server/server.js'
+
+// Register tsx ESM loader so we can import TypeScript modules directly
+// (used for the tmux WebSocket server, which needs to attach to httpServer
+// outside the TanStack Start request lifecycle).
+try {
+  register('tsx/esm', pathToFileURL('./'))
+} catch (err) {
+  console.warn('[server-entry] tsx loader registration failed:', err?.message ?? err)
+}
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const CLIENT_DIR = join(__dirname, 'dist', 'client')
@@ -194,6 +204,13 @@ const httpServer = createServer(async (req, res) => {
   }
 })
 
-httpServer.listen(port, host, () => {
+httpServer.listen(port, host, async () => {
   console.log(`Hermes Workspace running at http://${host}:${port}`)
+  // Attach tmux WebSocket multiplexer (path: /api/tmux/ws)
+  try {
+    const { attachTmuxWebSocket } = await import('./src/server/tmux-ws.ts')
+    attachTmuxWebSocket(httpServer)
+  } catch (err) {
+    console.error('[tmux-ws] failed to attach:', err)
+  }
 })

@@ -53,6 +53,74 @@ Cada entrada deve usar um **timestamp ISO 8601 completo** como cabeçalho de se�
 
 ---
 
+## 2026-05-14T12:40:00+02:00 — Terminal: multiplexer tmux com WebSocket + MCP server
+
+**Contexto:** O terminal antigo usava SSE para output + `POST /api/terminal-input` por keystroke. Latência alta (50–150ms/tecla), terminal travando em conexões com latência. Além disso, não permitia fechar todos os terminais (forçava sempre 1 aberto), não tinha multi-panel, e não tinha jeito de inspecionar/comandar terminais a partir do Claude. Migração completa para tmux real + WebSocket único + MCP server.
+
+**Arquivos criados:**
+- `src/server/tmux-sessions.ts` — backend tmux (sessions, panes, capture, send, FIFO streaming via `tmux pipe-pane`)
+- `src/server/tmux-ws.ts` — WebSocket multiplexado `/api/tmux/ws` (subscribe/input/resize/output/exit)
+- `src/routes/api/tmux/session.ts`, `session.$tabId.ts`, `pane.$paneId.ts`, `pane.$paneId.split.ts`, `pane.$paneId.capture.ts`, `pane.$paneId.send.ts`, `list.ts` — REST endpoints
+- `src/components/terminal/use-tmux-ws.ts` — hook React com WS auto-reconnect e fila de mensagens
+- `src/components/terminal/terminal-command-palette.tsx` — Cmd+K palette (summarize/send/rename)
+- `mcp-servers/hermes-tmux/{index.mjs, package.json, README.md}` — MCP server stdio com 6 ferramentas
+- `context-docs/terminal-multiplexed/PLAN.md` — plano técnico consolidado
+
+**Arquivos modificados:**
+- `src/components/terminal/terminal-panel.tsx` (reescrito para usar WS+tmux; mantém Fase 0 close-all + empty state; adiciona rename inline por duplo-clique e atalho Cmd+K)
+- `server-entry.js` (registra `tsx/esm` loader e chama `attachTmuxWebSocket(httpServer)` após `listen`)
+- `package.json` (adicionadas: `react-resizable-panels@^4.11.1`, `@modelcontextprotocol/sdk@^1.29.0`)
+
+**Backend (tmux):**
+- Cada aba do frontend = uma session tmux dedicada `hermes-<tabId>`
+- Lifecycle 1:1: criar aba → `tmux new-session`; fechar aba → `tmux kill-session`
+- Streaming: cada pane redireciona output via `tmux pipe-pane -o -t <pane> "cat > /tmp/hermes-tmux-fifos/pane-X.fifo"`; Node lê da FIFO e emite via WebSocket
+- Capture: `tmux capture-pane -p -S -<lines> -J` (escape sequences preservados)
+- Send-keys literal: `tmux send-keys -t <pane> -l <data>` — xterm já encoda Enter como `\r`, Ctrl-C como `\x03` etc.
+- Resize: `tmux resize-window -t <session> -x cols -y rows`
+- Cleanup automático: ao iniciar o servidor, `tmux list-sessions | grep ^hermes-` é matado; handler SIGINT/SIGTERM faz o mesmo
+- Estado compartilhado via `globalThis[Symbol.for('hermes.tmux-sessions.store')]` — REST endpoints (bundlados em `dist/server/server.js`) e o WS (carregado em runtime via tsx) compartilham o mesmo Map de sessions
+
+**WebSocket protocol (JSON text frames):**
+- Cliente → servidor: `subscribe`, `unsubscribe`, `input`, `resize`
+- Servidor → cliente: `output`, `exit`, `error`
+- Auth via cookie `hermes-auth` (mesmo helper de `auth-middleware.ts`)
+- Uma conexão por aba do browser, multiplexa todos os panes
+
+**Frontend:**
+- Hook `useTmuxWs()` mantém WS estável, com reconnect automático e re-subscribe pós-reconnect
+- xterm.onData → `sendInput`; xterm.onResize → `sendResize`; eventos `output` do servidor → `terminal.write`
+- Cmd+K abre command palette com ações: "Summarize: <nome>", "Send command to: <nome>", "Rename: <nome>"
+- Duplo-clique no título da aba abre input inline pra renomear (chama `PATCH /api/tmux/session/:tabId`)
+- Botão ⌘K visível na barra superior; status "tmux: %N" mostra o paneId atual
+
+**MCP Server (`mcp-servers/hermes-tmux/`):**
+- Stdio MCP server que se comunica com o workspace via REST API
+- Ferramentas expostas:
+  - `tmux_list_terminals` — lista sessions/panes com nomes
+  - `tmux_get_output(terminal, lines?)` — captura scrollback
+  - `tmux_send_command(terminal, command, submit?)` — envia comando
+  - `tmux_create_terminal(name?, cwd?)` — cria aba programaticamente
+  - `tmux_close_terminal(terminal)` — fecha aba
+  - `tmux_rename_terminal(tabId, name)` — renomeia
+- Resolução flexível: aceita name, tabId ou paneId em `terminal`
+- Registro manual: `claude mcp add hermes-tmux node /root/hermes-workspace/mcp-servers/hermes-tmux/index.mjs --env HERMES_WORKSPACE_URL=http://127.0.0.1:3001`
+
+**Testes end-to-end realizados:**
+- `POST /api/tmux/session` cria session e retorna `paneId` ✓
+- `POST /api/tmux/pane/%X/send` + `GET /api/tmux/pane/%X/capture` → output esperado ✓
+- WebSocket subscribe → input → output flui em tempo real ✓
+- MCP handshake + `tmux_list_terminals` + `tmux_send_command` + `tmux_get_output` ✓
+- `DELETE /api/tmux/session/:tabId` mata `hermes-*` session ✓
+
+**Pontos de atenção:**
+- `server-entry.js` registra `tsx/esm` loader (gera warning de deprecation em Node 22 mas funciona)
+- O frontend precisa ser rebuildado (`vite build`) para os novos endpoints REST aparecerem em `dist/server/server.js`
+- Splits (horizontal/vertical) ficaram fora desta iteração — endpoint `POST /api/tmux/pane/:paneId/split` já existe e pode ser ligado à UI no futuro com `react-resizable-panels`
+- MCP server NÃO foi registrado automaticamente — comando de registro está no README dele
+
+---
+
 ## 2026-05-14T11:50:00+02:00 — Files: substituição do Monaco pelo CodeMirror 6
 
 **Contexto:** Apesar de várias tentativas (correção da CSP, modo uncontrolled, `key` por arquivo, remoção do `padding`), o Monaco continuava com problemas — cursor invisível em alguns casos, click desalinhado, Enter saltando para a última linha. Decisão: substituir Monaco por CodeMirror 6, que é mais leve, totalmente local (zero CDN) e tem handling de cursor mais previsível.

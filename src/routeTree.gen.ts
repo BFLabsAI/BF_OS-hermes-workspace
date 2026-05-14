@@ -13,6 +13,7 @@ import { Route as TerminalRouteImport } from './routes/terminal'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SkillsRouteImport } from './routes/skills'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as ProfilesRouteImport } from './routes/profiles'
 import { Route as OperationsRouteImport } from './routes/operations'
 import { Route as MemoryRouteImport } from './routes/memory'
@@ -24,9 +25,11 @@ import { Route as ConductorRouteImport } from './routes/conductor'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as ChatIndexRouteImport } from './routes/chat/index'
 import { Route as SettingsProvidersRouteImport } from './routes/settings/providers'
 import { Route as SettingsMcpRouteImport } from './routes/settings/mcp'
+import { Route as ProjectsProjectIdRouteImport } from './routes/projects/$projectId'
 import { Route as ChatSessionKeyRouteImport } from './routes/chat/$sessionKey'
 import { Route as ApiWorkspaceRouteImport } from './routes/api/workspace'
 import { Route as ApiTerminalStreamRouteImport } from './routes/api/terminal-stream'
@@ -42,6 +45,8 @@ import { Route as ApiSessionSendRouteImport } from './routes/api/session-send'
 import { Route as ApiSessionHistoryRouteImport } from './routes/api/session-history'
 import { Route as ApiSendStreamRouteImport } from './routes/api/send-stream'
 import { Route as ApiSendRouteImport } from './routes/api/send'
+import { Route as ApiProjectsRouteImport } from './routes/api/projects'
+import { Route as ApiProjectTasksAllRouteImport } from './routes/api/project-tasks-all'
 import { Route as ApiPreviewFileRouteImport } from './routes/api/preview-file'
 import { Route as ApiPingRouteImport } from './routes/api/ping'
 import { Route as ApiPathsRouteImport } from './routes/api/paths'
@@ -73,11 +78,19 @@ import { Route as ApiConductorSpawnRouteImport } from './routes/api/conductor-sp
 import { Route as ApiChatEventsRouteImport } from './routes/api/chat-events'
 import { Route as ApiAuthCheckRouteImport } from './routes/api/auth-check'
 import { Route as ApiAuthRouteImport } from './routes/api/auth'
+import { Route as ProjectsProjectIdTasksRouteImport } from './routes/projects/$projectId/tasks'
+import { Route as ProjectsProjectIdNotesRouteImport } from './routes/projects/$projectId/notes'
+import { Route as ProjectsProjectIdDeliverablesRouteImport } from './routes/projects/$projectId/deliverables'
+import { Route as ApiTmuxSessionRouteImport } from './routes/api/tmux/session'
+import { Route as ApiTmuxListRouteImport } from './routes/api/tmux/list'
 import { Route as ApiSkillsUninstallRouteImport } from './routes/api/skills/uninstall'
 import { Route as ApiSkillsToggleRouteImport } from './routes/api/skills/toggle'
 import { Route as ApiSkillsInstallRouteImport } from './routes/api/skills/install'
 import { Route as ApiSkillsHubSearchRouteImport } from './routes/api/skills/hub-search'
 import { Route as ApiSessionsSendRouteImport } from './routes/api/sessions/send'
+import { Route as ApiProjectsProjectIdRouteImport } from './routes/api/projects.$projectId'
+import { Route as ApiProjectTasksTaskIdRouteImport } from './routes/api/project-tasks.$taskId'
+import { Route as ApiProjectNotesNoteIdRouteImport } from './routes/api/project-notes.$noteId'
 import { Route as ApiProfilesUpdateRouteImport } from './routes/api/profiles/update'
 import { Route as ApiProfilesRenameRouteImport } from './routes/api/profiles/rename'
 import { Route as ApiProfilesReadRouteImport } from './routes/api/profiles/read'
@@ -103,8 +116,19 @@ import { Route as ApiKnowledgeConfigRouteImport } from './routes/api/knowledge/c
 import { Route as ApiKanbanTasksTaskIdRouteImport } from './routes/api/kanban-tasks.$taskId'
 import { Route as ApiHermesProxySplatRouteImport } from './routes/api/hermes-proxy/$'
 import { Route as ApiHermesJobsJobIdRouteImport } from './routes/api/hermes-jobs.$jobId'
+import { Route as ProjectsProjectIdTasksTaskIdRouteImport } from './routes/projects/$projectId/tasks/$taskId'
+import { Route as ProjectsProjectIdNotesNoteIdRouteImport } from './routes/projects/$projectId/notes/$noteId'
+import { Route as ApiTmuxSessionTabIdRouteImport } from './routes/api/tmux/session.$tabId'
+import { Route as ApiTmuxPanePaneIdRouteImport } from './routes/api/tmux/pane.$paneId'
 import { Route as ApiSessionsSessionKeyStatusRouteImport } from './routes/api/sessions/$sessionKey.status'
 import { Route as ApiSessionsSessionKeyActiveRunRouteImport } from './routes/api/sessions/$sessionKey.active-run'
+import { Route as ApiProjectsProjectIdTasksRouteImport } from './routes/api/projects.$projectId.tasks'
+import { Route as ApiProjectsProjectIdNotesRouteImport } from './routes/api/projects.$projectId.notes'
+import { Route as ApiProjectTasksTaskIdDeliverablesRouteImport } from './routes/api/project-tasks.$taskId.deliverables'
+import { Route as ApiProjectTasksTaskIdContextRouteImport } from './routes/api/project-tasks.$taskId.context'
+import { Route as ApiTmuxPanePaneIdSplitRouteImport } from './routes/api/tmux/pane.$paneId.split'
+import { Route as ApiTmuxPanePaneIdSendRouteImport } from './routes/api/tmux/pane.$paneId.send'
+import { Route as ApiTmuxPanePaneIdCaptureRouteImport } from './routes/api/tmux/pane.$paneId.capture'
 
 const TerminalRoute = TerminalRouteImport.update({
   id: '/terminal',
@@ -124,6 +148,11 @@ const SkillsRoute = SkillsRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProjectsRoute = ProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProfilesRoute = ProfilesRouteImport.update({
@@ -181,6 +210,11 @@ const SettingsIndexRoute = SettingsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => SettingsRoute,
 } as any)
+const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProjectsRoute,
+} as any)
 const ChatIndexRoute = ChatIndexRouteImport.update({
   id: '/chat/',
   path: '/chat/',
@@ -195,6 +229,11 @@ const SettingsMcpRoute = SettingsMcpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
   getParentRoute: () => SettingsRoute,
+} as any)
+const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
+  id: '/$projectId',
+  path: '/$projectId',
+  getParentRoute: () => ProjectsRoute,
 } as any)
 const ChatSessionKeyRoute = ChatSessionKeyRouteImport.update({
   id: '/chat/$sessionKey',
@@ -269,6 +308,16 @@ const ApiSendStreamRoute = ApiSendStreamRouteImport.update({
 const ApiSendRoute = ApiSendRouteImport.update({
   id: '/api/send',
   path: '/api/send',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProjectsRoute = ApiProjectsRouteImport.update({
+  id: '/api/projects',
+  path: '/api/projects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProjectTasksAllRoute = ApiProjectTasksAllRouteImport.update({
+  id: '/api/project-tasks-all',
+  path: '/api/project-tasks-all',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPreviewFileRoute = ApiPreviewFileRouteImport.update({
@@ -426,6 +475,32 @@ const ApiAuthRoute = ApiAuthRouteImport.update({
   path: '/api/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProjectsProjectIdTasksRoute = ProjectsProjectIdTasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => ProjectsProjectIdRoute,
+} as any)
+const ProjectsProjectIdNotesRoute = ProjectsProjectIdNotesRouteImport.update({
+  id: '/notes',
+  path: '/notes',
+  getParentRoute: () => ProjectsProjectIdRoute,
+} as any)
+const ProjectsProjectIdDeliverablesRoute =
+  ProjectsProjectIdDeliverablesRouteImport.update({
+    id: '/deliverables',
+    path: '/deliverables',
+    getParentRoute: () => ProjectsProjectIdRoute,
+  } as any)
+const ApiTmuxSessionRoute = ApiTmuxSessionRouteImport.update({
+  id: '/api/tmux/session',
+  path: '/api/tmux/session',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTmuxListRoute = ApiTmuxListRouteImport.update({
+  id: '/api/tmux/list',
+  path: '/api/tmux/list',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSkillsUninstallRoute = ApiSkillsUninstallRouteImport.update({
   id: '/uninstall',
   path: '/uninstall',
@@ -450,6 +525,21 @@ const ApiSessionsSendRoute = ApiSessionsSendRouteImport.update({
   id: '/send',
   path: '/send',
   getParentRoute: () => ApiSessionsRoute,
+} as any)
+const ApiProjectsProjectIdRoute = ApiProjectsProjectIdRouteImport.update({
+  id: '/$projectId',
+  path: '/$projectId',
+  getParentRoute: () => ApiProjectsRoute,
+} as any)
+const ApiProjectTasksTaskIdRoute = ApiProjectTasksTaskIdRouteImport.update({
+  id: '/api/project-tasks/$taskId',
+  path: '/api/project-tasks/$taskId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiProjectNotesNoteIdRoute = ApiProjectNotesNoteIdRouteImport.update({
+  id: '/api/project-notes/$noteId',
+  path: '/api/project-notes/$noteId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiProfilesUpdateRoute = ApiProfilesUpdateRouteImport.update({
   id: '/api/profiles/update',
@@ -576,6 +666,28 @@ const ApiHermesJobsJobIdRoute = ApiHermesJobsJobIdRouteImport.update({
   path: '/$jobId',
   getParentRoute: () => ApiHermesJobsRoute,
 } as any)
+const ProjectsProjectIdTasksTaskIdRoute =
+  ProjectsProjectIdTasksTaskIdRouteImport.update({
+    id: '/$taskId',
+    path: '/$taskId',
+    getParentRoute: () => ProjectsProjectIdTasksRoute,
+  } as any)
+const ProjectsProjectIdNotesNoteIdRoute =
+  ProjectsProjectIdNotesNoteIdRouteImport.update({
+    id: '/$noteId',
+    path: '/$noteId',
+    getParentRoute: () => ProjectsProjectIdNotesRoute,
+  } as any)
+const ApiTmuxSessionTabIdRoute = ApiTmuxSessionTabIdRouteImport.update({
+  id: '/$tabId',
+  path: '/$tabId',
+  getParentRoute: () => ApiTmuxSessionRoute,
+} as any)
+const ApiTmuxPanePaneIdRoute = ApiTmuxPanePaneIdRouteImport.update({
+  id: '/api/tmux/pane/$paneId',
+  path: '/api/tmux/pane/$paneId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSessionsSessionKeyStatusRoute =
   ApiSessionsSessionKeyStatusRouteImport.update({
     id: '/$sessionKey/status',
@@ -587,6 +699,46 @@ const ApiSessionsSessionKeyActiveRunRoute =
     id: '/$sessionKey/active-run',
     path: '/$sessionKey/active-run',
     getParentRoute: () => ApiSessionsRoute,
+  } as any)
+const ApiProjectsProjectIdTasksRoute =
+  ApiProjectsProjectIdTasksRouteImport.update({
+    id: '/tasks',
+    path: '/tasks',
+    getParentRoute: () => ApiProjectsProjectIdRoute,
+  } as any)
+const ApiProjectsProjectIdNotesRoute =
+  ApiProjectsProjectIdNotesRouteImport.update({
+    id: '/notes',
+    path: '/notes',
+    getParentRoute: () => ApiProjectsProjectIdRoute,
+  } as any)
+const ApiProjectTasksTaskIdDeliverablesRoute =
+  ApiProjectTasksTaskIdDeliverablesRouteImport.update({
+    id: '/deliverables',
+    path: '/deliverables',
+    getParentRoute: () => ApiProjectTasksTaskIdRoute,
+  } as any)
+const ApiProjectTasksTaskIdContextRoute =
+  ApiProjectTasksTaskIdContextRouteImport.update({
+    id: '/context',
+    path: '/context',
+    getParentRoute: () => ApiProjectTasksTaskIdRoute,
+  } as any)
+const ApiTmuxPanePaneIdSplitRoute = ApiTmuxPanePaneIdSplitRouteImport.update({
+  id: '/split',
+  path: '/split',
+  getParentRoute: () => ApiTmuxPanePaneIdRoute,
+} as any)
+const ApiTmuxPanePaneIdSendRoute = ApiTmuxPanePaneIdSendRouteImport.update({
+  id: '/send',
+  path: '/send',
+  getParentRoute: () => ApiTmuxPanePaneIdRoute,
+} as any)
+const ApiTmuxPanePaneIdCaptureRoute =
+  ApiTmuxPanePaneIdCaptureRouteImport.update({
+    id: '/capture',
+    path: '/capture',
+    getParentRoute: () => ApiTmuxPanePaneIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -600,6 +752,7 @@ export interface FileRoutesByFullPath {
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
   '/profiles': typeof ProfilesRoute
+  '/projects': typeof ProjectsRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
   '/skills': typeof SkillsRoute
   '/tasks': typeof TasksRoute
@@ -635,6 +788,8 @@ export interface FileRoutesByFullPath {
   '/api/paths': typeof ApiPathsRoute
   '/api/ping': typeof ApiPingRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
+  '/api/project-tasks-all': typeof ApiProjectTasksAllRoute
+  '/api/projects': typeof ApiProjectsRouteWithChildren
   '/api/send': typeof ApiSendRoute
   '/api/send-stream': typeof ApiSendStreamRoute
   '/api/session-history': typeof ApiSessionHistoryRoute
@@ -650,9 +805,11 @@ export interface FileRoutesByFullPath {
   '/api/terminal-stream': typeof ApiTerminalStreamRoute
   '/api/workspace': typeof ApiWorkspaceRoute
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/settings/mcp': typeof SettingsMcpRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat/': typeof ChatIndexRoute
+  '/projects/': typeof ProjectsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/hermes-jobs/$jobId': typeof ApiHermesJobsJobIdRoute
   '/api/hermes-proxy/$': typeof ApiHermesProxySplatRoute
@@ -679,13 +836,32 @@ export interface FileRoutesByFullPath {
   '/api/profiles/read': typeof ApiProfilesReadRoute
   '/api/profiles/rename': typeof ApiProfilesRenameRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
+  '/api/project-notes/$noteId': typeof ApiProjectNotesNoteIdRoute
+  '/api/project-tasks/$taskId': typeof ApiProjectTasksTaskIdRouteWithChildren
+  '/api/projects/$projectId': typeof ApiProjectsProjectIdRouteWithChildren
   '/api/sessions/send': typeof ApiSessionsSendRoute
   '/api/skills/hub-search': typeof ApiSkillsHubSearchRoute
   '/api/skills/install': typeof ApiSkillsInstallRoute
   '/api/skills/toggle': typeof ApiSkillsToggleRoute
   '/api/skills/uninstall': typeof ApiSkillsUninstallRoute
+  '/api/tmux/list': typeof ApiTmuxListRoute
+  '/api/tmux/session': typeof ApiTmuxSessionRouteWithChildren
+  '/projects/$projectId/deliverables': typeof ProjectsProjectIdDeliverablesRoute
+  '/projects/$projectId/notes': typeof ProjectsProjectIdNotesRouteWithChildren
+  '/projects/$projectId/tasks': typeof ProjectsProjectIdTasksRouteWithChildren
+  '/api/project-tasks/$taskId/context': typeof ApiProjectTasksTaskIdContextRoute
+  '/api/project-tasks/$taskId/deliverables': typeof ApiProjectTasksTaskIdDeliverablesRoute
+  '/api/projects/$projectId/notes': typeof ApiProjectsProjectIdNotesRoute
+  '/api/projects/$projectId/tasks': typeof ApiProjectsProjectIdTasksRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/tmux/pane/$paneId': typeof ApiTmuxPanePaneIdRouteWithChildren
+  '/api/tmux/session/$tabId': typeof ApiTmuxSessionTabIdRoute
+  '/projects/$projectId/notes/$noteId': typeof ProjectsProjectIdNotesNoteIdRoute
+  '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
+  '/api/tmux/pane/$paneId/capture': typeof ApiTmuxPanePaneIdCaptureRoute
+  '/api/tmux/pane/$paneId/send': typeof ApiTmuxPanePaneIdSendRoute
+  '/api/tmux/pane/$paneId/split': typeof ApiTmuxPanePaneIdSplitRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -732,6 +908,8 @@ export interface FileRoutesByTo {
   '/api/paths': typeof ApiPathsRoute
   '/api/ping': typeof ApiPingRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
+  '/api/project-tasks-all': typeof ApiProjectTasksAllRoute
+  '/api/projects': typeof ApiProjectsRouteWithChildren
   '/api/send': typeof ApiSendRoute
   '/api/send-stream': typeof ApiSendStreamRoute
   '/api/session-history': typeof ApiSessionHistoryRoute
@@ -747,9 +925,11 @@ export interface FileRoutesByTo {
   '/api/terminal-stream': typeof ApiTerminalStreamRoute
   '/api/workspace': typeof ApiWorkspaceRoute
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/settings/mcp': typeof SettingsMcpRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat': typeof ChatIndexRoute
+  '/projects': typeof ProjectsIndexRoute
   '/settings': typeof SettingsIndexRoute
   '/api/hermes-jobs/$jobId': typeof ApiHermesJobsJobIdRoute
   '/api/hermes-proxy/$': typeof ApiHermesProxySplatRoute
@@ -776,13 +956,32 @@ export interface FileRoutesByTo {
   '/api/profiles/read': typeof ApiProfilesReadRoute
   '/api/profiles/rename': typeof ApiProfilesRenameRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
+  '/api/project-notes/$noteId': typeof ApiProjectNotesNoteIdRoute
+  '/api/project-tasks/$taskId': typeof ApiProjectTasksTaskIdRouteWithChildren
+  '/api/projects/$projectId': typeof ApiProjectsProjectIdRouteWithChildren
   '/api/sessions/send': typeof ApiSessionsSendRoute
   '/api/skills/hub-search': typeof ApiSkillsHubSearchRoute
   '/api/skills/install': typeof ApiSkillsInstallRoute
   '/api/skills/toggle': typeof ApiSkillsToggleRoute
   '/api/skills/uninstall': typeof ApiSkillsUninstallRoute
+  '/api/tmux/list': typeof ApiTmuxListRoute
+  '/api/tmux/session': typeof ApiTmuxSessionRouteWithChildren
+  '/projects/$projectId/deliverables': typeof ProjectsProjectIdDeliverablesRoute
+  '/projects/$projectId/notes': typeof ProjectsProjectIdNotesRouteWithChildren
+  '/projects/$projectId/tasks': typeof ProjectsProjectIdTasksRouteWithChildren
+  '/api/project-tasks/$taskId/context': typeof ApiProjectTasksTaskIdContextRoute
+  '/api/project-tasks/$taskId/deliverables': typeof ApiProjectTasksTaskIdDeliverablesRoute
+  '/api/projects/$projectId/notes': typeof ApiProjectsProjectIdNotesRoute
+  '/api/projects/$projectId/tasks': typeof ApiProjectsProjectIdTasksRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/tmux/pane/$paneId': typeof ApiTmuxPanePaneIdRouteWithChildren
+  '/api/tmux/session/$tabId': typeof ApiTmuxSessionTabIdRoute
+  '/projects/$projectId/notes/$noteId': typeof ProjectsProjectIdNotesNoteIdRoute
+  '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
+  '/api/tmux/pane/$paneId/capture': typeof ApiTmuxPanePaneIdCaptureRoute
+  '/api/tmux/pane/$paneId/send': typeof ApiTmuxPanePaneIdSendRoute
+  '/api/tmux/pane/$paneId/split': typeof ApiTmuxPanePaneIdSplitRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -796,6 +995,7 @@ export interface FileRoutesById {
   '/memory': typeof MemoryRoute
   '/operations': typeof OperationsRoute
   '/profiles': typeof ProfilesRoute
+  '/projects': typeof ProjectsRouteWithChildren
   '/settings': typeof SettingsRouteWithChildren
   '/skills': typeof SkillsRoute
   '/tasks': typeof TasksRoute
@@ -831,6 +1031,8 @@ export interface FileRoutesById {
   '/api/paths': typeof ApiPathsRoute
   '/api/ping': typeof ApiPingRoute
   '/api/preview-file': typeof ApiPreviewFileRoute
+  '/api/project-tasks-all': typeof ApiProjectTasksAllRoute
+  '/api/projects': typeof ApiProjectsRouteWithChildren
   '/api/send': typeof ApiSendRoute
   '/api/send-stream': typeof ApiSendStreamRoute
   '/api/session-history': typeof ApiSessionHistoryRoute
@@ -846,9 +1048,11 @@ export interface FileRoutesById {
   '/api/terminal-stream': typeof ApiTerminalStreamRoute
   '/api/workspace': typeof ApiWorkspaceRoute
   '/chat/$sessionKey': typeof ChatSessionKeyRoute
+  '/projects/$projectId': typeof ProjectsProjectIdRouteWithChildren
   '/settings/mcp': typeof SettingsMcpRoute
   '/settings/providers': typeof SettingsProvidersRoute
   '/chat/': typeof ChatIndexRoute
+  '/projects/': typeof ProjectsIndexRoute
   '/settings/': typeof SettingsIndexRoute
   '/api/hermes-jobs/$jobId': typeof ApiHermesJobsJobIdRoute
   '/api/hermes-proxy/$': typeof ApiHermesProxySplatRoute
@@ -875,13 +1079,32 @@ export interface FileRoutesById {
   '/api/profiles/read': typeof ApiProfilesReadRoute
   '/api/profiles/rename': typeof ApiProfilesRenameRoute
   '/api/profiles/update': typeof ApiProfilesUpdateRoute
+  '/api/project-notes/$noteId': typeof ApiProjectNotesNoteIdRoute
+  '/api/project-tasks/$taskId': typeof ApiProjectTasksTaskIdRouteWithChildren
+  '/api/projects/$projectId': typeof ApiProjectsProjectIdRouteWithChildren
   '/api/sessions/send': typeof ApiSessionsSendRoute
   '/api/skills/hub-search': typeof ApiSkillsHubSearchRoute
   '/api/skills/install': typeof ApiSkillsInstallRoute
   '/api/skills/toggle': typeof ApiSkillsToggleRoute
   '/api/skills/uninstall': typeof ApiSkillsUninstallRoute
+  '/api/tmux/list': typeof ApiTmuxListRoute
+  '/api/tmux/session': typeof ApiTmuxSessionRouteWithChildren
+  '/projects/$projectId/deliverables': typeof ProjectsProjectIdDeliverablesRoute
+  '/projects/$projectId/notes': typeof ProjectsProjectIdNotesRouteWithChildren
+  '/projects/$projectId/tasks': typeof ProjectsProjectIdTasksRouteWithChildren
+  '/api/project-tasks/$taskId/context': typeof ApiProjectTasksTaskIdContextRoute
+  '/api/project-tasks/$taskId/deliverables': typeof ApiProjectTasksTaskIdDeliverablesRoute
+  '/api/projects/$projectId/notes': typeof ApiProjectsProjectIdNotesRoute
+  '/api/projects/$projectId/tasks': typeof ApiProjectsProjectIdTasksRoute
   '/api/sessions/$sessionKey/active-run': typeof ApiSessionsSessionKeyActiveRunRoute
   '/api/sessions/$sessionKey/status': typeof ApiSessionsSessionKeyStatusRoute
+  '/api/tmux/pane/$paneId': typeof ApiTmuxPanePaneIdRouteWithChildren
+  '/api/tmux/session/$tabId': typeof ApiTmuxSessionTabIdRoute
+  '/projects/$projectId/notes/$noteId': typeof ProjectsProjectIdNotesNoteIdRoute
+  '/projects/$projectId/tasks/$taskId': typeof ProjectsProjectIdTasksTaskIdRoute
+  '/api/tmux/pane/$paneId/capture': typeof ApiTmuxPanePaneIdCaptureRoute
+  '/api/tmux/pane/$paneId/send': typeof ApiTmuxPanePaneIdSendRoute
+  '/api/tmux/pane/$paneId/split': typeof ApiTmuxPanePaneIdSplitRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -896,6 +1119,7 @@ export interface FileRouteTypes {
     | '/memory'
     | '/operations'
     | '/profiles'
+    | '/projects'
     | '/settings'
     | '/skills'
     | '/tasks'
@@ -931,6 +1155,8 @@ export interface FileRouteTypes {
     | '/api/paths'
     | '/api/ping'
     | '/api/preview-file'
+    | '/api/project-tasks-all'
+    | '/api/projects'
     | '/api/send'
     | '/api/send-stream'
     | '/api/session-history'
@@ -946,9 +1172,11 @@ export interface FileRouteTypes {
     | '/api/terminal-stream'
     | '/api/workspace'
     | '/chat/$sessionKey'
+    | '/projects/$projectId'
     | '/settings/mcp'
     | '/settings/providers'
     | '/chat/'
+    | '/projects/'
     | '/settings/'
     | '/api/hermes-jobs/$jobId'
     | '/api/hermes-proxy/$'
@@ -975,13 +1203,32 @@ export interface FileRouteTypes {
     | '/api/profiles/read'
     | '/api/profiles/rename'
     | '/api/profiles/update'
+    | '/api/project-notes/$noteId'
+    | '/api/project-tasks/$taskId'
+    | '/api/projects/$projectId'
     | '/api/sessions/send'
     | '/api/skills/hub-search'
     | '/api/skills/install'
     | '/api/skills/toggle'
     | '/api/skills/uninstall'
+    | '/api/tmux/list'
+    | '/api/tmux/session'
+    | '/projects/$projectId/deliverables'
+    | '/projects/$projectId/notes'
+    | '/projects/$projectId/tasks'
+    | '/api/project-tasks/$taskId/context'
+    | '/api/project-tasks/$taskId/deliverables'
+    | '/api/projects/$projectId/notes'
+    | '/api/projects/$projectId/tasks'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
+    | '/api/tmux/pane/$paneId'
+    | '/api/tmux/session/$tabId'
+    | '/projects/$projectId/notes/$noteId'
+    | '/projects/$projectId/tasks/$taskId'
+    | '/api/tmux/pane/$paneId/capture'
+    | '/api/tmux/pane/$paneId/send'
+    | '/api/tmux/pane/$paneId/split'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -1028,6 +1275,8 @@ export interface FileRouteTypes {
     | '/api/paths'
     | '/api/ping'
     | '/api/preview-file'
+    | '/api/project-tasks-all'
+    | '/api/projects'
     | '/api/send'
     | '/api/send-stream'
     | '/api/session-history'
@@ -1043,9 +1292,11 @@ export interface FileRouteTypes {
     | '/api/terminal-stream'
     | '/api/workspace'
     | '/chat/$sessionKey'
+    | '/projects/$projectId'
     | '/settings/mcp'
     | '/settings/providers'
     | '/chat'
+    | '/projects'
     | '/settings'
     | '/api/hermes-jobs/$jobId'
     | '/api/hermes-proxy/$'
@@ -1072,13 +1323,32 @@ export interface FileRouteTypes {
     | '/api/profiles/read'
     | '/api/profiles/rename'
     | '/api/profiles/update'
+    | '/api/project-notes/$noteId'
+    | '/api/project-tasks/$taskId'
+    | '/api/projects/$projectId'
     | '/api/sessions/send'
     | '/api/skills/hub-search'
     | '/api/skills/install'
     | '/api/skills/toggle'
     | '/api/skills/uninstall'
+    | '/api/tmux/list'
+    | '/api/tmux/session'
+    | '/projects/$projectId/deliverables'
+    | '/projects/$projectId/notes'
+    | '/projects/$projectId/tasks'
+    | '/api/project-tasks/$taskId/context'
+    | '/api/project-tasks/$taskId/deliverables'
+    | '/api/projects/$projectId/notes'
+    | '/api/projects/$projectId/tasks'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
+    | '/api/tmux/pane/$paneId'
+    | '/api/tmux/session/$tabId'
+    | '/projects/$projectId/notes/$noteId'
+    | '/projects/$projectId/tasks/$taskId'
+    | '/api/tmux/pane/$paneId/capture'
+    | '/api/tmux/pane/$paneId/send'
+    | '/api/tmux/pane/$paneId/split'
   id:
     | '__root__'
     | '/'
@@ -1091,6 +1361,7 @@ export interface FileRouteTypes {
     | '/memory'
     | '/operations'
     | '/profiles'
+    | '/projects'
     | '/settings'
     | '/skills'
     | '/tasks'
@@ -1126,6 +1397,8 @@ export interface FileRouteTypes {
     | '/api/paths'
     | '/api/ping'
     | '/api/preview-file'
+    | '/api/project-tasks-all'
+    | '/api/projects'
     | '/api/send'
     | '/api/send-stream'
     | '/api/session-history'
@@ -1141,9 +1414,11 @@ export interface FileRouteTypes {
     | '/api/terminal-stream'
     | '/api/workspace'
     | '/chat/$sessionKey'
+    | '/projects/$projectId'
     | '/settings/mcp'
     | '/settings/providers'
     | '/chat/'
+    | '/projects/'
     | '/settings/'
     | '/api/hermes-jobs/$jobId'
     | '/api/hermes-proxy/$'
@@ -1170,13 +1445,32 @@ export interface FileRouteTypes {
     | '/api/profiles/read'
     | '/api/profiles/rename'
     | '/api/profiles/update'
+    | '/api/project-notes/$noteId'
+    | '/api/project-tasks/$taskId'
+    | '/api/projects/$projectId'
     | '/api/sessions/send'
     | '/api/skills/hub-search'
     | '/api/skills/install'
     | '/api/skills/toggle'
     | '/api/skills/uninstall'
+    | '/api/tmux/list'
+    | '/api/tmux/session'
+    | '/projects/$projectId/deliverables'
+    | '/projects/$projectId/notes'
+    | '/projects/$projectId/tasks'
+    | '/api/project-tasks/$taskId/context'
+    | '/api/project-tasks/$taskId/deliverables'
+    | '/api/projects/$projectId/notes'
+    | '/api/projects/$projectId/tasks'
     | '/api/sessions/$sessionKey/active-run'
     | '/api/sessions/$sessionKey/status'
+    | '/api/tmux/pane/$paneId'
+    | '/api/tmux/session/$tabId'
+    | '/projects/$projectId/notes/$noteId'
+    | '/projects/$projectId/tasks/$taskId'
+    | '/api/tmux/pane/$paneId/capture'
+    | '/api/tmux/pane/$paneId/send'
+    | '/api/tmux/pane/$paneId/split'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1190,6 +1484,7 @@ export interface RootRouteChildren {
   MemoryRoute: typeof MemoryRoute
   OperationsRoute: typeof OperationsRoute
   ProfilesRoute: typeof ProfilesRoute
+  ProjectsRoute: typeof ProjectsRouteWithChildren
   SettingsRoute: typeof SettingsRouteWithChildren
   SkillsRoute: typeof SkillsRoute
   TasksRoute: typeof TasksRoute
@@ -1225,6 +1520,8 @@ export interface RootRouteChildren {
   ApiPathsRoute: typeof ApiPathsRoute
   ApiPingRoute: typeof ApiPingRoute
   ApiPreviewFileRoute: typeof ApiPreviewFileRoute
+  ApiProjectTasksAllRoute: typeof ApiProjectTasksAllRoute
+  ApiProjectsRoute: typeof ApiProjectsRouteWithChildren
   ApiSendRoute: typeof ApiSendRoute
   ApiSendStreamRoute: typeof ApiSendStreamRoute
   ApiSessionHistoryRoute: typeof ApiSessionHistoryRoute
@@ -1260,6 +1557,11 @@ export interface RootRouteChildren {
   ApiProfilesReadRoute: typeof ApiProfilesReadRoute
   ApiProfilesRenameRoute: typeof ApiProfilesRenameRoute
   ApiProfilesUpdateRoute: typeof ApiProfilesUpdateRoute
+  ApiProjectNotesNoteIdRoute: typeof ApiProjectNotesNoteIdRoute
+  ApiProjectTasksTaskIdRoute: typeof ApiProjectTasksTaskIdRouteWithChildren
+  ApiTmuxListRoute: typeof ApiTmuxListRoute
+  ApiTmuxSessionRoute: typeof ApiTmuxSessionRouteWithChildren
+  ApiTmuxPanePaneIdRoute: typeof ApiTmuxPanePaneIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -1290,6 +1592,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/projects': {
+      id: '/projects'
+      path: '/projects'
+      fullPath: '/projects'
+      preLoaderRoute: typeof ProjectsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/profiles': {
@@ -1369,6 +1678,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/projects/': {
+      id: '/projects/'
+      path: '/'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof ProjectsIndexRouteImport
+      parentRoute: typeof ProjectsRoute
+    }
     '/chat/': {
       id: '/chat/'
       path: '/chat'
@@ -1389,6 +1705,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/mcp'
       preLoaderRoute: typeof SettingsMcpRouteImport
       parentRoute: typeof SettingsRoute
+    }
+    '/projects/$projectId': {
+      id: '/projects/$projectId'
+      path: '/$projectId'
+      fullPath: '/projects/$projectId'
+      preLoaderRoute: typeof ProjectsProjectIdRouteImport
+      parentRoute: typeof ProjectsRoute
     }
     '/chat/$sessionKey': {
       id: '/chat/$sessionKey'
@@ -1493,6 +1816,20 @@ declare module '@tanstack/react-router' {
       path: '/api/send'
       fullPath: '/api/send'
       preLoaderRoute: typeof ApiSendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/projects': {
+      id: '/api/projects'
+      path: '/api/projects'
+      fullPath: '/api/projects'
+      preLoaderRoute: typeof ApiProjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/project-tasks-all': {
+      id: '/api/project-tasks-all'
+      path: '/api/project-tasks-all'
+      fullPath: '/api/project-tasks-all'
+      preLoaderRoute: typeof ApiProjectTasksAllRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/preview-file': {
@@ -1712,6 +2049,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/projects/$projectId/tasks': {
+      id: '/projects/$projectId/tasks'
+      path: '/tasks'
+      fullPath: '/projects/$projectId/tasks'
+      preLoaderRoute: typeof ProjectsProjectIdTasksRouteImport
+      parentRoute: typeof ProjectsProjectIdRoute
+    }
+    '/projects/$projectId/notes': {
+      id: '/projects/$projectId/notes'
+      path: '/notes'
+      fullPath: '/projects/$projectId/notes'
+      preLoaderRoute: typeof ProjectsProjectIdNotesRouteImport
+      parentRoute: typeof ProjectsProjectIdRoute
+    }
+    '/projects/$projectId/deliverables': {
+      id: '/projects/$projectId/deliverables'
+      path: '/deliverables'
+      fullPath: '/projects/$projectId/deliverables'
+      preLoaderRoute: typeof ProjectsProjectIdDeliverablesRouteImport
+      parentRoute: typeof ProjectsProjectIdRoute
+    }
+    '/api/tmux/session': {
+      id: '/api/tmux/session'
+      path: '/api/tmux/session'
+      fullPath: '/api/tmux/session'
+      preLoaderRoute: typeof ApiTmuxSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/tmux/list': {
+      id: '/api/tmux/list'
+      path: '/api/tmux/list'
+      fullPath: '/api/tmux/list'
+      preLoaderRoute: typeof ApiTmuxListRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/skills/uninstall': {
       id: '/api/skills/uninstall'
       path: '/uninstall'
@@ -1746,6 +2118,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/sessions/send'
       preLoaderRoute: typeof ApiSessionsSendRouteImport
       parentRoute: typeof ApiSessionsRoute
+    }
+    '/api/projects/$projectId': {
+      id: '/api/projects/$projectId'
+      path: '/$projectId'
+      fullPath: '/api/projects/$projectId'
+      preLoaderRoute: typeof ApiProjectsProjectIdRouteImport
+      parentRoute: typeof ApiProjectsRoute
+    }
+    '/api/project-tasks/$taskId': {
+      id: '/api/project-tasks/$taskId'
+      path: '/api/project-tasks/$taskId'
+      fullPath: '/api/project-tasks/$taskId'
+      preLoaderRoute: typeof ApiProjectTasksTaskIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/project-notes/$noteId': {
+      id: '/api/project-notes/$noteId'
+      path: '/api/project-notes/$noteId'
+      fullPath: '/api/project-notes/$noteId'
+      preLoaderRoute: typeof ApiProjectNotesNoteIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/profiles/update': {
       id: '/api/profiles/update'
@@ -1922,6 +2315,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiHermesJobsJobIdRouteImport
       parentRoute: typeof ApiHermesJobsRoute
     }
+    '/projects/$projectId/tasks/$taskId': {
+      id: '/projects/$projectId/tasks/$taskId'
+      path: '/$taskId'
+      fullPath: '/projects/$projectId/tasks/$taskId'
+      preLoaderRoute: typeof ProjectsProjectIdTasksTaskIdRouteImport
+      parentRoute: typeof ProjectsProjectIdTasksRoute
+    }
+    '/projects/$projectId/notes/$noteId': {
+      id: '/projects/$projectId/notes/$noteId'
+      path: '/$noteId'
+      fullPath: '/projects/$projectId/notes/$noteId'
+      preLoaderRoute: typeof ProjectsProjectIdNotesNoteIdRouteImport
+      parentRoute: typeof ProjectsProjectIdNotesRoute
+    }
+    '/api/tmux/session/$tabId': {
+      id: '/api/tmux/session/$tabId'
+      path: '/$tabId'
+      fullPath: '/api/tmux/session/$tabId'
+      preLoaderRoute: typeof ApiTmuxSessionTabIdRouteImport
+      parentRoute: typeof ApiTmuxSessionRoute
+    }
+    '/api/tmux/pane/$paneId': {
+      id: '/api/tmux/pane/$paneId'
+      path: '/api/tmux/pane/$paneId'
+      fullPath: '/api/tmux/pane/$paneId'
+      preLoaderRoute: typeof ApiTmuxPanePaneIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/sessions/$sessionKey/status': {
       id: '/api/sessions/$sessionKey/status'
       path: '/$sessionKey/status'
@@ -1936,8 +2357,114 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSessionsSessionKeyActiveRunRouteImport
       parentRoute: typeof ApiSessionsRoute
     }
+    '/api/projects/$projectId/tasks': {
+      id: '/api/projects/$projectId/tasks'
+      path: '/tasks'
+      fullPath: '/api/projects/$projectId/tasks'
+      preLoaderRoute: typeof ApiProjectsProjectIdTasksRouteImport
+      parentRoute: typeof ApiProjectsProjectIdRoute
+    }
+    '/api/projects/$projectId/notes': {
+      id: '/api/projects/$projectId/notes'
+      path: '/notes'
+      fullPath: '/api/projects/$projectId/notes'
+      preLoaderRoute: typeof ApiProjectsProjectIdNotesRouteImport
+      parentRoute: typeof ApiProjectsProjectIdRoute
+    }
+    '/api/project-tasks/$taskId/deliverables': {
+      id: '/api/project-tasks/$taskId/deliverables'
+      path: '/deliverables'
+      fullPath: '/api/project-tasks/$taskId/deliverables'
+      preLoaderRoute: typeof ApiProjectTasksTaskIdDeliverablesRouteImport
+      parentRoute: typeof ApiProjectTasksTaskIdRoute
+    }
+    '/api/project-tasks/$taskId/context': {
+      id: '/api/project-tasks/$taskId/context'
+      path: '/context'
+      fullPath: '/api/project-tasks/$taskId/context'
+      preLoaderRoute: typeof ApiProjectTasksTaskIdContextRouteImport
+      parentRoute: typeof ApiProjectTasksTaskIdRoute
+    }
+    '/api/tmux/pane/$paneId/split': {
+      id: '/api/tmux/pane/$paneId/split'
+      path: '/split'
+      fullPath: '/api/tmux/pane/$paneId/split'
+      preLoaderRoute: typeof ApiTmuxPanePaneIdSplitRouteImport
+      parentRoute: typeof ApiTmuxPanePaneIdRoute
+    }
+    '/api/tmux/pane/$paneId/send': {
+      id: '/api/tmux/pane/$paneId/send'
+      path: '/send'
+      fullPath: '/api/tmux/pane/$paneId/send'
+      preLoaderRoute: typeof ApiTmuxPanePaneIdSendRouteImport
+      parentRoute: typeof ApiTmuxPanePaneIdRoute
+    }
+    '/api/tmux/pane/$paneId/capture': {
+      id: '/api/tmux/pane/$paneId/capture'
+      path: '/capture'
+      fullPath: '/api/tmux/pane/$paneId/capture'
+      preLoaderRoute: typeof ApiTmuxPanePaneIdCaptureRouteImport
+      parentRoute: typeof ApiTmuxPanePaneIdRoute
+    }
   }
 }
+
+interface ProjectsProjectIdNotesRouteChildren {
+  ProjectsProjectIdNotesNoteIdRoute: typeof ProjectsProjectIdNotesNoteIdRoute
+}
+
+const ProjectsProjectIdNotesRouteChildren: ProjectsProjectIdNotesRouteChildren =
+  {
+    ProjectsProjectIdNotesNoteIdRoute: ProjectsProjectIdNotesNoteIdRoute,
+  }
+
+const ProjectsProjectIdNotesRouteWithChildren =
+  ProjectsProjectIdNotesRoute._addFileChildren(
+    ProjectsProjectIdNotesRouteChildren,
+  )
+
+interface ProjectsProjectIdTasksRouteChildren {
+  ProjectsProjectIdTasksTaskIdRoute: typeof ProjectsProjectIdTasksTaskIdRoute
+}
+
+const ProjectsProjectIdTasksRouteChildren: ProjectsProjectIdTasksRouteChildren =
+  {
+    ProjectsProjectIdTasksTaskIdRoute: ProjectsProjectIdTasksTaskIdRoute,
+  }
+
+const ProjectsProjectIdTasksRouteWithChildren =
+  ProjectsProjectIdTasksRoute._addFileChildren(
+    ProjectsProjectIdTasksRouteChildren,
+  )
+
+interface ProjectsProjectIdRouteChildren {
+  ProjectsProjectIdDeliverablesRoute: typeof ProjectsProjectIdDeliverablesRoute
+  ProjectsProjectIdNotesRoute: typeof ProjectsProjectIdNotesRouteWithChildren
+  ProjectsProjectIdTasksRoute: typeof ProjectsProjectIdTasksRouteWithChildren
+}
+
+const ProjectsProjectIdRouteChildren: ProjectsProjectIdRouteChildren = {
+  ProjectsProjectIdDeliverablesRoute: ProjectsProjectIdDeliverablesRoute,
+  ProjectsProjectIdNotesRoute: ProjectsProjectIdNotesRouteWithChildren,
+  ProjectsProjectIdTasksRoute: ProjectsProjectIdTasksRouteWithChildren,
+}
+
+const ProjectsProjectIdRouteWithChildren =
+  ProjectsProjectIdRoute._addFileChildren(ProjectsProjectIdRouteChildren)
+
+interface ProjectsRouteChildren {
+  ProjectsProjectIdRoute: typeof ProjectsProjectIdRouteWithChildren
+  ProjectsIndexRoute: typeof ProjectsIndexRoute
+}
+
+const ProjectsRouteChildren: ProjectsRouteChildren = {
+  ProjectsProjectIdRoute: ProjectsProjectIdRouteWithChildren,
+  ProjectsIndexRoute: ProjectsIndexRoute,
+}
+
+const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
+  ProjectsRouteChildren,
+)
 
 interface SettingsRouteChildren {
   SettingsMcpRoute: typeof SettingsMcpRoute
@@ -1997,6 +2524,31 @@ const ApiMemoryRouteWithChildren = ApiMemoryRoute._addFileChildren(
   ApiMemoryRouteChildren,
 )
 
+interface ApiProjectsProjectIdRouteChildren {
+  ApiProjectsProjectIdNotesRoute: typeof ApiProjectsProjectIdNotesRoute
+  ApiProjectsProjectIdTasksRoute: typeof ApiProjectsProjectIdTasksRoute
+}
+
+const ApiProjectsProjectIdRouteChildren: ApiProjectsProjectIdRouteChildren = {
+  ApiProjectsProjectIdNotesRoute: ApiProjectsProjectIdNotesRoute,
+  ApiProjectsProjectIdTasksRoute: ApiProjectsProjectIdTasksRoute,
+}
+
+const ApiProjectsProjectIdRouteWithChildren =
+  ApiProjectsProjectIdRoute._addFileChildren(ApiProjectsProjectIdRouteChildren)
+
+interface ApiProjectsRouteChildren {
+  ApiProjectsProjectIdRoute: typeof ApiProjectsProjectIdRouteWithChildren
+}
+
+const ApiProjectsRouteChildren: ApiProjectsRouteChildren = {
+  ApiProjectsProjectIdRoute: ApiProjectsProjectIdRouteWithChildren,
+}
+
+const ApiProjectsRouteWithChildren = ApiProjectsRoute._addFileChildren(
+  ApiProjectsRouteChildren,
+)
+
 interface ApiSessionsRouteChildren {
   ApiSessionsSendRoute: typeof ApiSessionsSendRoute
   ApiSessionsSessionKeyActiveRunRoute: typeof ApiSessionsSessionKeyActiveRunRoute
@@ -2031,6 +2583,49 @@ const ApiSkillsRouteWithChildren = ApiSkillsRoute._addFileChildren(
   ApiSkillsRouteChildren,
 )
 
+interface ApiProjectTasksTaskIdRouteChildren {
+  ApiProjectTasksTaskIdContextRoute: typeof ApiProjectTasksTaskIdContextRoute
+  ApiProjectTasksTaskIdDeliverablesRoute: typeof ApiProjectTasksTaskIdDeliverablesRoute
+}
+
+const ApiProjectTasksTaskIdRouteChildren: ApiProjectTasksTaskIdRouteChildren = {
+  ApiProjectTasksTaskIdContextRoute: ApiProjectTasksTaskIdContextRoute,
+  ApiProjectTasksTaskIdDeliverablesRoute:
+    ApiProjectTasksTaskIdDeliverablesRoute,
+}
+
+const ApiProjectTasksTaskIdRouteWithChildren =
+  ApiProjectTasksTaskIdRoute._addFileChildren(
+    ApiProjectTasksTaskIdRouteChildren,
+  )
+
+interface ApiTmuxSessionRouteChildren {
+  ApiTmuxSessionTabIdRoute: typeof ApiTmuxSessionTabIdRoute
+}
+
+const ApiTmuxSessionRouteChildren: ApiTmuxSessionRouteChildren = {
+  ApiTmuxSessionTabIdRoute: ApiTmuxSessionTabIdRoute,
+}
+
+const ApiTmuxSessionRouteWithChildren = ApiTmuxSessionRoute._addFileChildren(
+  ApiTmuxSessionRouteChildren,
+)
+
+interface ApiTmuxPanePaneIdRouteChildren {
+  ApiTmuxPanePaneIdCaptureRoute: typeof ApiTmuxPanePaneIdCaptureRoute
+  ApiTmuxPanePaneIdSendRoute: typeof ApiTmuxPanePaneIdSendRoute
+  ApiTmuxPanePaneIdSplitRoute: typeof ApiTmuxPanePaneIdSplitRoute
+}
+
+const ApiTmuxPanePaneIdRouteChildren: ApiTmuxPanePaneIdRouteChildren = {
+  ApiTmuxPanePaneIdCaptureRoute: ApiTmuxPanePaneIdCaptureRoute,
+  ApiTmuxPanePaneIdSendRoute: ApiTmuxPanePaneIdSendRoute,
+  ApiTmuxPanePaneIdSplitRoute: ApiTmuxPanePaneIdSplitRoute,
+}
+
+const ApiTmuxPanePaneIdRouteWithChildren =
+  ApiTmuxPanePaneIdRoute._addFileChildren(ApiTmuxPanePaneIdRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
@@ -2042,6 +2637,7 @@ const rootRouteChildren: RootRouteChildren = {
   MemoryRoute: MemoryRoute,
   OperationsRoute: OperationsRoute,
   ProfilesRoute: ProfilesRoute,
+  ProjectsRoute: ProjectsRouteWithChildren,
   SettingsRoute: SettingsRouteWithChildren,
   SkillsRoute: SkillsRoute,
   TasksRoute: TasksRoute,
@@ -2077,6 +2673,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPathsRoute: ApiPathsRoute,
   ApiPingRoute: ApiPingRoute,
   ApiPreviewFileRoute: ApiPreviewFileRoute,
+  ApiProjectTasksAllRoute: ApiProjectTasksAllRoute,
+  ApiProjectsRoute: ApiProjectsRouteWithChildren,
   ApiSendRoute: ApiSendRoute,
   ApiSendStreamRoute: ApiSendStreamRoute,
   ApiSessionHistoryRoute: ApiSessionHistoryRoute,
@@ -2112,6 +2710,11 @@ const rootRouteChildren: RootRouteChildren = {
   ApiProfilesReadRoute: ApiProfilesReadRoute,
   ApiProfilesRenameRoute: ApiProfilesRenameRoute,
   ApiProfilesUpdateRoute: ApiProfilesUpdateRoute,
+  ApiProjectNotesNoteIdRoute: ApiProjectNotesNoteIdRoute,
+  ApiProjectTasksTaskIdRoute: ApiProjectTasksTaskIdRouteWithChildren,
+  ApiTmuxListRoute: ApiTmuxListRoute,
+  ApiTmuxSessionRoute: ApiTmuxSessionRouteWithChildren,
+  ApiTmuxPanePaneIdRoute: ApiTmuxPanePaneIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

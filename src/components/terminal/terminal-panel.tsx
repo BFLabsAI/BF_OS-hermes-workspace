@@ -14,22 +14,23 @@ import {
 } from '@hugeicons/core-free-icons'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useTmuxWs, type TmuxWsHandle } from './use-tmux-ws'
+import { TerminalCommandPalette } from './terminal-command-palette'
 
 const PANEL_HEIGHT_KEY = 'terminal.panel.height'
 const PANEL_OPEN_KEY = 'terminal.panel.open'
-const TABS_KEY = 'terminal.tabs'
-const ACTIVE_TAB_KEY = 'terminal.active'
+const TABS_KEY = 'terminal.tabs.v2'
+const ACTIVE_TAB_KEY = 'terminal.active.v2'
 
 const DEFAULT_HEIGHT = 360
 const MIN_HEIGHT = 300
 const MAX_HEIGHT = 480
-const DEFAULT_CWD = '~/.hermes'
 
 type TerminalTabState = {
-  id: string
+  tabId: string
   title: string
-  sessionId?: string
-  log?: string
+  // Single-pane for v1; Phase 2 will expand to a tree of panes.
+  paneId?: string
 }
 
 type TerminalPanelProps = {
@@ -48,36 +49,35 @@ export function TerminalPanel({ isMobile }: TerminalPanelProps) {
   })
   const [tabs, setTabs] = useState<Array<TerminalTabState>>(() => {
     const stored = window.localStorage.getItem(TABS_KEY)
-    if (!stored) {
-      return [{ id: crypto.randomUUID(), title: 'Terminal 1' }]
-    }
+    if (!stored) return []
     try {
-      const parsed = JSON.parse(stored) as Array<TerminalTabState>
-      return parsed.length
-        ? parsed
-        : [{ id: crypto.randomUUID(), title: 'Terminal 1' }]
+      // Only restore title; paneId is server state and not persisted.
+      const parsed = JSON.parse(stored) as Array<{ tabId: string; title: string }>
+      return parsed.map((p) => ({ tabId: p.tabId, title: p.title }))
     } catch {
-      return [{ id: crypto.randomUUID(), title: 'Terminal 1' }]
+      return []
     }
   })
-  const [activeTabId, setActiveTabId] = useState(() => {
+  const [activeTabId, setActiveTabId] = useState<string | undefined>(() => {
     const stored = window.localStorage.getItem(ACTIVE_TAB_KEY)
-    return stored || tabs[0]?.id
+    return stored || tabs[0]?.tabId
   })
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [renamingTabId, setRenamingTabId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+
+  const ws = useTmuxWs()
+  const wsRef = useRef<TmuxWsHandle>(ws)
+  useEffect(() => {
+    wsRef.current = ws
+  }, [ws])
 
   const resizingRef = useRef(false)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  // xterm instance + addons per paneId (one pane per tab in v1)
   const terminalMap = useRef(new Map<string, Terminal>())
   const fitMap = useRef(new Map<string, FitAddon>())
   const searchMap = useRef(new Map<string, SearchAddon>())
-  const logBufferRef = useRef(new Map<string, string>())
-  const logSaveTimers = useRef(new Map<string, number>())
-  // Mirror activeTabId in a ref so the long-lived SSE reader closure can
-  // check the current value without forcing the whole effect to re-run.
-  const activeTabIdRef = useRef<string | undefined>(undefined)
-  // Mirror tabs in a ref so terminal.onData closures always see the latest
-  // sessionId without needing to re-register onData every time tabs changes.
-  const tabsRef = useRef(tabs)
 
   useEffect(() => {
     window.localStorage.setItem(PANEL_OPEN_KEY, String(isOpen))
@@ -89,62 +89,64 @@ export function TerminalPanel({ isMobile }: TerminalPanelProps) {
   }, [height])
 
   useEffect(() => {
-    window.localStorage.setItem(TABS_KEY, JSON.stringify(tabs))
+    // Persist only stable identifiers + title (paneId is recreated server-side).
+    window.localStorage.setItem(
+      TABS_KEY,
+      JSON.stringify(tabs.map((t) => ({ tabId: t.tabId, title: t.title }))),
+    )
   }, [tabs])
 
   useEffect(() => {
-    activeTabIdRef.current = activeTabId
     if (activeTabId) {
       window.localStorage.setItem(ACTIVE_TAB_KEY, activeTabId)
+    } else {
+      window.localStorage.removeItem(ACTIVE_TAB_KEY)
     }
   }, [activeTabId])
 
-  useEffect(() => {
-    tabsRef.current = tabs
-  }, [tabs])
-
   const activeTab = useMemo(
-    () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
+    () => tabs.find((tab) => tab.tabId === activeTabId) ?? tabs[0],
     [tabs, activeTabId],
   )
 
   const handleAddTab = useCallback(() => {
+    const tabId = crypto.randomUUID()
     const newTab: TerminalTabState = {
-      id: crypto.randomUUID(),
+      tabId,
       title: `Terminal ${tabs.length + 1}`,
     }
     setTabs((prev) => [...prev, newTab])
-    setActiveTabId(newTab.id)
+    setActiveTabId(tabId)
+    setIsOpen(true)
   }, [tabs.length])
 
   const handleCloseTab = useCallback(
     async (tabId: string) => {
-      const tab = tabs.find((item) => item.id === tabId)
-      if (tab?.sessionId) {
-        await fetch('/api/terminal-close', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId: tab.sessionId }),
-        }).catch(() => undefined)
+      // Kill server session
+      void fetch(`/api/tmux/session/${encodeURIComponent(tabId)}`, {
+        method: 'DELETE',
+      }).catch(() => undefined)
+
+      const closingTab = tabs.find((t) => t.tabId === tabId)
+      if (closingTab?.paneId) {
+        wsRef.current.unsubscribe(closingTab.paneId)
+        const term = terminalMap.current.get(closingTab.paneId)
+        term?.dispose()
+        terminalMap.current.delete(closingTab.paneId)
+        fitMap.current.delete(closingTab.paneId)
+        searchMap.current.delete(closingTab.paneId)
       }
-      setTabs((prev) => prev.filter((item) => item.id !== tabId))
+
+      setTabs((prev) => prev.filter((t) => t.tabId !== tabId))
       if (activeTabId === tabId) {
-        const remaining = tabs.filter((item) => item.id !== tabId)
-        setActiveTabId(remaining[0]?.id)
+        const remaining = tabs.filter((t) => t.tabId !== tabId)
+        setActiveTabId(remaining[0]?.tabId)
       }
-      const term = terminalMap.current.get(tabId)
-      term?.dispose()
-      terminalMap.current.delete(tabId)
-      fitMap.current.delete(tabId)
-      searchMap.current.delete(tabId)
-      logBufferRef.current.delete(tabId)
     },
     [activeTabId, tabs],
   )
 
-  const handleToggleOpen = useCallback(() => {
-    setIsOpen((prev) => !prev)
-  }, [])
+  const handleToggleOpen = useCallback(() => setIsOpen((p) => !p), [])
 
   const handleResizeStart = useCallback(
     (event: React.MouseEvent) => {
@@ -161,9 +163,7 @@ export function TerminalPanel({ isMobile }: TerminalPanelProps) {
           Math.max(MIN_HEIGHT, startHeight + delta),
         )
         setHeight(nextHeight)
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
-        const fit = fitMap.current.get(activeTab?.id ?? '')
-        fit?.fit()
+        for (const fit of fitMap.current.values()) fit.fit()
       }
 
       const handleUp = () => {
@@ -175,214 +175,125 @@ export function TerminalPanel({ isMobile }: TerminalPanelProps) {
       window.addEventListener('mousemove', handleMove)
       window.addEventListener('mouseup', handleUp)
     },
-    [activeTab?.id, height],
+    [height],
   )
 
-  const handleSendInput = useCallback(
-    async (tabId: string, data: string) => {
-      // Use tabsRef so this callback never goes stale — terminal.onData is
-      // registered once on init and would otherwise close over the old tabs
-      // value where sessionId was still null.
-      const tab = tabsRef.current.find((item) => item.id === tabId)
-      if (!tab?.sessionId) return
-      await fetch('/api/terminal-input', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: tab.sessionId, data }),
-      }).catch(() => undefined)
-    },
-    [],
-  )
-
-  const initializeTerminal = useCallback(
-    (tabId: string, container: HTMLDivElement | null) => {
-      if (!container) return
-      if (terminalMap.current.has(tabId)) return
-
+  // Provision a server-side tmux session for a tab that doesn't have one yet,
+  // then subscribe to the WS for output.
+  const provisionTab = useCallback(
+    async (tab: TerminalTabState, container: HTMLDivElement) => {
       const terminal = new Terminal({
-        theme: {
-          background: '#0b0f1a',
-        },
+        theme: { background: '#0b0f1a' },
         cursorBlink: true,
         fontSize: 13,
         fontFamily: 'Menlo, Monaco, Consolas, "Courier New", monospace',
-        scrollback: 500,
+        scrollback: 5000,
         convertEol: true,
       })
       const fitAddon = new FitAddon()
-      const webLinks = new WebLinksAddon()
-      const searchAddon = new SearchAddon()
-
       terminal.loadAddon(fitAddon)
-      terminal.loadAddon(webLinks)
+      terminal.loadAddon(new WebLinksAddon())
+      const searchAddon = new SearchAddon()
       terminal.loadAddon(searchAddon)
       terminal.open(container)
       fitAddon.fit()
 
-      const storedTab = tabs.find((tab) => tab.id === tabId)
-      if (storedTab?.log) {
-        terminal.write(storedTab.log)
+      // POST /api/tmux/session
+      let paneId: string | undefined
+      try {
+        const res = await fetch('/api/tmux/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tabId: tab.tabId,
+            name: tab.title,
+            cols: terminal.cols,
+            rows: terminal.rows,
+          }),
+        })
+        const body = (await res.json()) as { ok: boolean; paneId?: string; error?: string }
+        if (!body.ok || !body.paneId) {
+          terminal.writeln(`\r\n[tmux] failed to create session: ${body.error ?? 'unknown'}\r\n`)
+          return
+        }
+        paneId = body.paneId
+      } catch (err) {
+        terminal.writeln(`\r\n[tmux] connection error: ${String(err)}\r\n`)
+        return
       }
+
+      terminalMap.current.set(paneId, terminal)
+      fitMap.current.set(paneId, fitAddon)
+      searchMap.current.set(paneId, searchAddon)
+
+      setTabs((prev) =>
+        prev.map((t) => (t.tabId === tab.tabId ? { ...t, paneId } : t)),
+      )
+
+      wsRef.current.subscribe(
+        paneId,
+        (data) => terminal.write(data),
+        () => terminal.writeln('\r\n\x1b[2m[session ended]\x1b[0m'),
+      )
 
       terminal.onData((data) => {
-        void handleSendInput(tabId, data)
+        if (paneId) wsRef.current.sendInput(paneId, data)
       })
 
-      terminalMap.current.set(tabId, terminal)
-      fitMap.current.set(tabId, fitAddon)
-      searchMap.current.set(tabId, searchAddon)
+      terminal.onResize(({ cols, rows }) => {
+        if (paneId) wsRef.current.sendResize(paneId, cols, rows)
+      })
+
+      // Initial resize event so the server matches xterm's geometry
+      wsRef.current.sendResize(paneId, terminal.cols, terminal.rows)
     },
-    [handleSendInput],
+    [],
   )
 
-  const connectSession = useCallback(async (tabId: string) => {
-    const terminal = terminalMap.current.get(tabId)
-    if (!terminal) return
-    const existing = tabs.find((tab) => tab.id === tabId)
-    if (existing?.sessionId) return
+  const handleSearch = useCallback((paneId: string | undefined, query: string) => {
+    if (!paneId) return
+    searchMap.current.get(paneId)?.findNext(query)
+  }, [])
 
-    const response = await fetch('/api/terminal-stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        // Let the server pick the shell from $SHELL
-        cwd: DEFAULT_CWD,
-      }),
-    })
-
-    if (!response.ok || !response.body) {
-      terminal.writeln('\r\n[terminal] failed to connect\r\n')
-      return
-    }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let sessionId: string | undefined
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const events = buffer.split('\n\n')
-      buffer = events.pop() ?? ''
-
-      for (const eventBlock of events) {
-        if (!eventBlock.trim()) continue
-        const lines = eventBlock.split('\n')
-        let currentEvent = ''
-        let currentData = ''
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            currentEvent = line.slice(7).trim()
-          } else if (line.startsWith('data: ')) {
-            currentData += line.slice(6)
-          } else if (line.startsWith('data:')) {
-            currentData += line.slice(5)
-          }
-        }
-        if (!currentEvent || !currentData) continue
-        try {
-          const payload = JSON.parse(currentData)
-          if (currentEvent === 'session') {
-            sessionId = payload.sessionId
-            setTabs((prev) =>
-              prev.map((tab) =>
-                tab.id === tabId ? { ...tab, sessionId } : tab,
-              ),
-            )
-            continue
-          }
-          if (currentEvent === 'exit' || currentEvent === 'close') {
-            // Server reported the PTY is gone. Clear the tab's sessionId so
-            // any subsequent /api/terminal-input or /api/terminal-resize
-            // calls don't fire against a dead session and 404. (#80)
-            const exitInfo =
-              currentEvent === 'exit' && typeof payload === 'object'
-                ? ` (exit code ${payload?.code ?? '?'}${payload?.signal ? `, signal ${payload.signal}` : ''})`
-                : ''
-            terminal.writeln(`\r\n\x1b[2m[session ended${exitInfo}]\x1b[0m`)
-            terminal.writeln(`\x1b[2m[click + to open a new tab, or reload to retry]\x1b[0m`)
-            setTabs((prev) =>
-              prev.map((tab) =>
-                tab.id === tabId ? { ...tab, sessionId: undefined } : tab,
-              ),
-            )
-            sessionId = undefined
-            continue
-          }
-          if (currentEvent === 'data') {
-            const textChunk =
-              payload?.data ??
-              payload?.text ??
-              payload?.chunk ??
-              payload?.output
-            if (typeof textChunk === 'string') {
-              terminal.write(textChunk)
-              // Restore keyboard focus after stream writes — some browsers
-              // (Chrome, Edge) yank DOM focus back to the page after the
-              // SSE reader resolves, which leaves xterm unable to receive
-              // keystrokes until the user reloads. (#136)
-              if (tabId === activeTabIdRef.current) {
-                terminal.focus()
-              }
-              const currentLog = logBufferRef.current.get(tabId) ?? ''
-              const nextLog = `${currentLog}${textChunk}`
-              logBufferRef.current.set(tabId, nextLog)
-              const existingTimer = logSaveTimers.current.get(tabId)
-              if (existingTimer) window.clearTimeout(existingTimer)
-              const timer = window.setTimeout(() => {
-                setTabs((prev) =>
-                  prev.map((tab) =>
-                    tab.id === tabId ? { ...tab, log: nextLog } : tab,
-                  ),
-                )
-              }, 500)
-              logSaveTimers.current.set(tabId, timer)
-            }
-          }
-        } catch {
-          // ignore
-        }
+  // Cmd+K / Ctrl+K opens the command palette
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((p) => !p)
       }
     }
-
-    if (sessionId) {
-      await fetch('/api/terminal-close', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId }),
-      }).catch(() => undefined)
-    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  const handleSearch = useCallback((tabId: string, query: string) => {
-    const addon = searchMap.current.get(tabId)
-    if (!addon) return
-    addon.findNext(query)
-  }, [])
-
-  useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
-    if (!activeTab?.sessionId) return
-    const term = terminalMap.current.get(activeTab.id)
-    if (!term) return
-    void fetch('/api/terminal-resize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sessionId: activeTab.sessionId,
-        cols: term.cols,
-        rows: term.rows,
-      }),
-    })
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
-  }, [activeTab?.id, activeTab?.sessionId, height])
+  const submitRename = useCallback(
+    async (tabId: string, name: string) => {
+      const trimmed = name.trim()
+      if (!trimmed) {
+        setRenamingTabId(null)
+        return
+      }
+      setTabs((prev) => prev.map((t) => (t.tabId === tabId ? { ...t, title: trimmed } : t)))
+      setRenamingTabId(null)
+      try {
+        await fetch(`/api/tmux/session/${encodeURIComponent(tabId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: trimmed }),
+        })
+      } catch {
+        /* */
+      }
+    },
+    [],
+  )
 
   if (isMobile) return null
 
   return (
+    <>
+    <TerminalCommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     <div className="flex flex-col bg-surface border-t border-primary-200">
       <div className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-2 text-sm font-medium">
@@ -418,35 +329,47 @@ export function TerminalPanel({ isMobile }: TerminalPanelProps) {
             <div className="flex items-center gap-2 border-b border-primary-200 px-3 py-2">
               <div className="flex items-center gap-2 overflow-x-auto">
                 {tabs.map((tab) => (
-                  <button
-                    key={tab.id}
+                  <div
+                    key={tab.tabId}
                     className={cn(
-                      'flex items-center gap-2 rounded-full border px-3 py-1 text-xs',
-                      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
-                      tab.id === activeTab?.id
+                      'flex items-center gap-2 rounded-full border px-3 py-1 text-xs cursor-pointer',
+                      tab.tabId === activeTab?.tabId
                         ? 'border-primary-400 bg-primary-100 text-primary-900'
                         : 'border-primary-200 text-primary-700',
                     )}
-                    onClick={() => setActiveTabId(tab.id)}
-                    // Suppress the browser native context menu on tab
-                    // headers — we don't ship a custom one yet and the
-                    // default actions don't work on a <button> with no
-                    // editable content. (#136)
+                    onClick={() => setActiveTabId(tab.tabId)}
+                    onDoubleClick={() => {
+                      setRenamingTabId(tab.tabId)
+                      setRenameValue(tab.title)
+                    }}
                     onContextMenu={(event) => event.preventDefault()}
                   >
-                    {tab.title}
-                    {tabs.length > 1 ? (
-                      <span
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          void handleCloseTab(tab.id)
+                    {renamingTabId === tab.tabId ? (
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onBlur={() => submitRename(tab.tabId, renameValue)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') void submitRename(tab.tabId, renameValue)
+                          if (e.key === 'Escape') setRenamingTabId(null)
                         }}
-                        className="text-primary-500 hover:text-primary-900"
-                      >
-                        <HugeiconsIcon icon={Cancel01Icon} size={12} />
-                      </span>
-                    ) : null}
-                  </button>
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-transparent border-b border-primary-400 focus:outline-none w-24"
+                      />
+                    ) : (
+                      <span>{tab.title}</span>
+                    )}
+                    <span
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void handleCloseTab(tab.tabId)
+                      }}
+                      className="text-primary-500 hover:text-primary-900"
+                    >
+                      <HugeiconsIcon icon={Cancel01Icon} size={12} />
+                    </span>
+                  </div>
                 ))}
               </div>
               <Button
@@ -459,104 +382,93 @@ export function TerminalPanel({ isMobile }: TerminalPanelProps) {
               </Button>
             </div>
 
-            <div className="flex items-center gap-2 border-b border-primary-200 px-3 py-2">
-              <div className="flex items-center gap-2 text-xs text-primary-500">
-                <HugeiconsIcon icon={Search01Icon} size={14} />
-                <input
-                  className="rounded border border-primary-200 bg-transparent px-2 py-1 text-xs focus:outline-none"
-                  placeholder="Search output"
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      handleSearch(
-                        activeTab?.id ?? '',
-                        event.currentTarget.value,
-                      )
-                    }
-                  }}
-                />
-              </div>
-              <div className="ml-auto text-xs text-primary-500">
-                cwd: {DEFAULT_CWD}
-              </div>
-            </div>
+            {tabs.length > 0 ? (
+              <>
+                <div className="flex items-center gap-2 border-b border-primary-200 px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs text-primary-500">
+                    <HugeiconsIcon icon={Search01Icon} size={14} />
+                    <input
+                      className="rounded border border-primary-200 bg-transparent px-2 py-1 text-xs focus:outline-none"
+                      placeholder="Search output"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          handleSearch(activeTab?.paneId, event.currentTarget.value)
+                        }
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => setPaletteOpen(true)}
+                    className="ml-auto text-xs text-primary-500 hover:text-primary-700 border border-primary-200 rounded px-2 py-0.5"
+                    title="Open command palette (Cmd+K)"
+                  >
+                    ⌘K
+                  </button>
+                  <div className="text-xs text-primary-500">
+                    tmux: {activeTab?.paneId ?? 'connecting…'}
+                  </div>
+                </div>
 
-            <div className="flex-1 overflow-hidden">
-              {tabs.map((tab) => (
-                <TerminalView
-                  key={tab.id}
-                  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime safety
-                  isActive={tab.id === activeTab?.id}
-                  onConnect={() => connectSession(tab.id)}
-                  onInput={(data) => handleSendInput(tab.id, data)}
-                  onReady={(container) => initializeTerminal(tab.id, container)}
-                />
-              ))}
-            </div>
+                <div className="flex-1 overflow-hidden">
+                  {tabs.map((tab) => (
+                    <TerminalView
+                      key={tab.tabId}
+                      tab={tab}
+                      isActive={tab.tabId === activeTab?.tabId}
+                      onReady={(container) => provisionTab(tab, container)}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 text-primary-500">
+                <HugeiconsIcon icon={ComputerTerminal01Icon} size={32} strokeWidth={1.2} />
+                <p className="text-sm">No terminals open</p>
+                <Button size="sm" onClick={handleAddTab} className="text-xs">
+                  <HugeiconsIcon icon={Add01Icon} size={12} strokeWidth={1.4} />
+                  New terminal
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
     </div>
+    </>
   )
 }
 
 type TerminalViewProps = {
+  tab: TerminalTabState
   isActive: boolean
-  onReady: (container: HTMLDivElement | null) => void
-  onConnect: () => void
-  onInput: (data: string) => void
+  onReady: (container: HTMLDivElement) => void
 }
 
-function TerminalView({
-  isActive,
-  onReady,
-  onConnect,
-  onInput,
-}: TerminalViewProps) {
+function TerminalView({ tab, isActive, onReady }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const initialized = useRef(false)
 
   useEffect(() => {
+    if (initialized.current) return
+    if (!containerRef.current) return
+    initialized.current = true
     onReady(containerRef.current)
-    onConnect()
-  }, [onConnect, onReady])
-
-  useEffect(() => {
-    if (!containerRef.current) return
-    const terminal = containerRef.current.querySelector('.xterm')
-    if (!terminal) return
-    terminal.classList.toggle('hidden', !isActive)
-  }, [isActive])
-
-  useEffect(() => {
-    if (!containerRef.current) return
-    const term = containerRef.current.querySelector('.xterm')
-    if (!term) return
-  }, [])
+  }, [onReady])
 
   return (
     <div
       ref={containerRef}
+      data-tab-id={tab.tabId}
+      data-pane-id={tab.paneId}
       className={cn(
         'h-full w-full bg-[#0b0f1a] text-primary-100',
         isActive ? 'block' : 'hidden',
       )}
-      // Clicking the container should always restore xterm focus — the
-      // textarea xterm uses for input is buried inside .xterm-helper-textarea
-      // and the click handler is the most reliable signal. (#136)
       onClick={() => {
         const textarea = containerRef.current?.querySelector<HTMLTextAreaElement>(
           '.xterm-helper-textarea',
         )
         textarea?.focus()
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'c' && (event.metaKey || event.ctrlKey)) {
-          document.execCommand('copy')
-        }
-        if (event.key === 'v' && (event.metaKey || event.ctrlKey)) {
-          navigator.clipboard.readText().then((text) => {
-            if (text) onInput(text)
-          })
-        }
       }}
     />
   )
