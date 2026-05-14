@@ -47,6 +47,29 @@ Cada entrada deve usar um **timestamp ISO 8601 completo** como cabeçalho de se�
 
 ---
 
+## 2026-05-14T09:06:00+02:00 — Settings: custom providers no dropdown + filtro Active only
+
+**Contexto:** Providers configurados via `custom_providers` no `config.yaml` (ex.: OmniRoute) não apareciam no dropdown de Provider em "Model Configuration" — o campo sempre mostrava "Custom" mesmo com `provider: OmniRoute` salvo. Causa raiz dupla: (1) o backend `/api/models` não lia o bloco `custom_providers` do config; (2) o frontend tinha `ModelProviderOption` como union hardcoded de 4 valores e `parseModelProvider` descartava qualquer coisa fora da lista. Usuário também pediu um toggle "All / Active only" na lista de providers configurados.
+
+**Arquivos modificados:**
+- `src/routes/api/models.ts`
+- `src/screens/settings/providers-screen.tsx`
+
+**Backend (`/api/models`):**
+- Nova função `readCustomProviderModels()` lê `custom_providers[]` do `config.yaml`; extrai modelos do dict `models:` e o `model:` padrão de cada entrada
+- `provider` de cada modelo assume o campo `name:` do provider (ex.: `OmniRoute`), com fallback para derivação via `key_env`
+- Modelos dos custom providers são merged na resposta antes da descoberta local (Ollama/Atomic Chat)
+
+**Frontend (`providers-screen.tsx`):**
+- `ModelProviderOption` ampliado de union literal para `string` — aceita qualquer provider
+- `MODEL_PROVIDER_VALUES` removido; `parseModelProvider` simplificado para retornar a string trimada ou `'custom'` se vazia
+- `ModelConfigSection` recebe nova prop `providerOptions?: Array<SelectOption>`; constrói `selectOptions` via `useMemo`, garantindo que o valor atual do config sempre tenha uma `<option>` correspondente (mesmo que não esteja nos summaries normalizados)
+- `ActiveModelCard` recebe `providerSummaries` e constrói o memo `providerOptions` dinamicamente; passa para Primary e Fallback `ModelConfigSection`
+- `ProvidersScreen` passa `providerSummaries` para `ActiveModelCard`
+- `ProviderManagementSection` ganhou estado local `showOnlyActive` + toggle "All / Active only" no header; contador de providers atualiza para mostrar `X of Y` quando filtrado
+
+---
+
 ## 2026-05-14T08:55:00+02:00 — Files: fix CSP bloqueando Monaco Editor (loading eterno)
 
 **Contexto:** Monaco carrega seu runtime de `cdn.jsdelivr.net`, mas a CSP do app (`script-src 'self' 'unsafe-inline'`) bloqueava scripts externos. Resultado: Monaco nunca inicializava e todos os arquivos ficavam em "Loading…" para sempre.

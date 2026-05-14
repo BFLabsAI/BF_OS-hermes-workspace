@@ -125,6 +125,75 @@ function readHermesDefaultModel(): ModelEntry | null {
 }
 
 /**
+ * Read models from custom_providers entries in config.yaml.
+ * Each entry may have a `name` field and a `models` dict.
+ */
+function readCustomProviderModels(): Array<ModelEntry> {
+  try {
+    if (!fs.existsSync(CONFIG_PATH)) return []
+    const raw = fs.readFileSync(CONFIG_PATH, 'utf-8')
+    const parsed = YAML.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return []
+    const config = parsed as Record<string, unknown>
+    const customProviders = Array.isArray(config.custom_providers)
+      ? config.custom_providers
+      : []
+
+    const models: Array<ModelEntry> = []
+    for (const cp of customProviders) {
+      if (!cp || typeof cp !== 'object') continue
+      const cpRecord = cp as Record<string, unknown>
+      const providerName =
+        typeof cpRecord.name === 'string' && cpRecord.name.trim()
+          ? cpRecord.name.trim()
+          : typeof cpRecord.key_env === 'string'
+            ? cpRecord.key_env.replace(/_API_KEY$/i, '').toLowerCase()
+            : 'custom'
+
+      const modelsDict = cpRecord.models
+      if (
+        modelsDict &&
+        typeof modelsDict === 'object' &&
+        !Array.isArray(modelsDict)
+      ) {
+        for (const [modelId, modelCfg] of Object.entries(
+          modelsDict as Record<string, unknown>,
+        )) {
+          if (!modelId) continue
+          const cfg =
+            modelCfg && typeof modelCfg === 'object'
+              ? (modelCfg as Record<string, unknown>)
+              : {}
+          models.push({
+            id: modelId,
+            name: modelId,
+            provider: providerName,
+            ...(typeof cfg.context_length === 'number'
+              ? { context_length: cfg.context_length }
+              : {}),
+          })
+        }
+      }
+
+      // Also include the default model if not already in the dict
+      const defaultModel =
+        typeof cpRecord.model === 'string' ? cpRecord.model.trim() : ''
+      if (defaultModel) {
+        const alreadyAdded = models.some(
+          (m) => m.provider === providerName && m.id === defaultModel,
+        )
+        if (!alreadyAdded) {
+          models.push({ id: defaultModel, name: defaultModel, provider: providerName })
+        }
+      }
+    }
+    return models
+  } catch {
+    return []
+  }
+}
+
+/**
  * Fallback: fetch models from the hermes-agent /v1/models endpoint.
  */
 async function fetchHermesModels(): Promise<Array<ModelEntry>> {
@@ -171,6 +240,18 @@ export const Route = createFileRoute('/api/models')({
           if (models.length === 0 && getGatewayCapabilities().models) {
             models = await fetchHermesModels()
             source = 'hermes-agent'
+          }
+
+          // Merge models from custom_providers in config.yaml
+          const customModels = readCustomProviderModels()
+          {
+            const existingCustomIds = new Set(models.map((m) => m.id))
+            for (const m of customModels) {
+              if (m.id && !existingCustomIds.has(m.id)) {
+                models.push(m)
+                existingCustomIds.add(m.id)
+              }
+            }
           }
 
           // Merge auto-discovered local models (Ollama, Atomic Chat, etc.)

@@ -160,8 +160,12 @@ async function readDirectory(
     const fullPath = path.join(dirPath, entry.name)
     const relativePath = toRelative(fullPath)
     try {
+      // Use fs.stat (follows symlinks) instead of entry.isDirectory() (which
+      // sees the symlink itself), so a symlink-to-directory is treated as a
+      // directory in the tree.
       const stats = await fs.stat(fullPath)
-      if (entry.isDirectory()) {
+      const isDir = stats.isDirectory()
+      if (isDir) {
         if (depth + 1 > options.maxDepth) {
           // At the depth limit — return folder without children so the UI
           // can lazy-fetch when expanded.

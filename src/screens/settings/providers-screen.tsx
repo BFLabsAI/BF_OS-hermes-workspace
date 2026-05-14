@@ -767,7 +767,7 @@ function SettingCard(props: {
   )
 }
 
-type ModelProviderOption = 'custom' | 'openrouter' | 'anthropic' | 'openai'
+type ModelProviderOption = string
 
 type ModelConfigDraft = {
   provider: ModelProviderOption
@@ -810,10 +810,6 @@ const MODEL_PRESETS = [
 
 const DEFAULT_STREAM_STALE_TIMEOUT_SECONDS = 90
 const DEFAULT_STREAM_READ_TIMEOUT_SECONDS = 60
-const MODEL_PROVIDER_VALUES = new Set<ModelProviderOption>(
-  MODEL_PROVIDER_OPTIONS.map((option) => option.value as ModelProviderOption),
-)
-
 function readRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -821,10 +817,7 @@ function readRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 function parseModelProvider(value: unknown): ModelProviderOption {
-  return typeof value === 'string' &&
-    MODEL_PROVIDER_VALUES.has(value as ModelProviderOption)
-    ? (value as ModelProviderOption)
-    : 'custom'
+  return typeof value === 'string' && value.trim() ? value.trim() : 'custom'
 }
 
 function readPrimaryModelConfig(
@@ -888,6 +881,7 @@ function ModelConfigSection(props: {
   value: ModelConfigDraft
   onChange: (nextValue: ModelConfigDraft) => void
   modelOptions: Array<SelectOption>
+  providerOptions?: Array<SelectOption>
   showPresets?: boolean
   datalistId: string
 }) {
@@ -897,9 +891,24 @@ function ModelConfigSection(props: {
     value,
     onChange,
     modelOptions,
+    providerOptions,
     showPresets = false,
     datalistId,
   } = props
+
+  // Build the effective list of provider options, ensuring the current value
+  // always has a matching entry even if it came from an unknown/custom provider.
+  const selectOptions = useMemo<Array<SelectOption>>(() => {
+    const base =
+      providerOptions && providerOptions.length > 0
+        ? providerOptions
+        : MODEL_PROVIDER_OPTIONS
+    const hasMatch = base.some((o) => o.value === value.provider)
+    if (!hasMatch && value.provider && value.provider !== 'custom') {
+      return [{ label: value.provider, value: value.provider }, ...base]
+    }
+    return base
+  }, [providerOptions, value.provider])
 
   return (
     <section className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-card)] p-4 shadow-sm">
@@ -923,7 +932,7 @@ function ModelConfigSection(props: {
               })
             }}
           >
-            {MODEL_PROVIDER_OPTIONS.map((option) => (
+            {selectOptions.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -1003,10 +1012,25 @@ function ModelConfigSection(props: {
 
 function ActiveModelCard({
   modelOptions,
+  providerSummaries,
 }: {
   modelOptions: Array<SelectOption>
+  providerSummaries: Array<ProviderSummary>
 }) {
   const queryClient = useQueryClient()
+
+  const providerOptions = useMemo<Array<SelectOption>>(() => {
+    const seen = new Set<string>()
+    const opts: Array<SelectOption> = [{ label: 'Custom', value: 'custom' }]
+    seen.add('custom')
+    for (const s of providerSummaries) {
+      if (!seen.has(s.id)) {
+        opts.push({ label: s.name, value: s.id })
+        seen.add(s.id)
+      }
+    }
+    return opts
+  }, [providerSummaries])
   const [primaryConfig, setPrimaryConfig] = useState<ModelConfigDraft>({
     provider: 'custom',
     model: '',
@@ -1131,6 +1155,7 @@ function ActiveModelCard({
             value={primaryConfig}
             onChange={setPrimaryConfig}
             modelOptions={modelOptions}
+            providerOptions={providerOptions}
             showPresets
             datalistId="settings-primary-model-options"
           />
@@ -1167,6 +1192,7 @@ function ActiveModelCard({
                   value={fallbackConfig}
                   onChange={setFallbackConfig}
                   modelOptions={modelOptions}
+                  providerOptions={providerOptions}
                   datalistId="settings-fallback-model-options"
                 />
               </div>
@@ -1260,6 +1286,12 @@ function ProviderManagementSection(props: {
     onDelete,
   } = props
 
+  const [showOnlyActive, setShowOnlyActive] = useState(false)
+
+  const displayedProviders = showOnlyActive
+    ? providerSummaries.filter((p) => p.status === 'active')
+    : providerSummaries
+
   return (
     <div className="space-y-5">
       <header className="flex flex-col gap-4 rounded-xl border border-primary-200 bg-primary-50/80 px-5 py-4 shadow-sm md:flex-row md:items-center md:justify-between">
@@ -1272,10 +1304,38 @@ function ProviderManagementSection(props: {
             for new providers.
           </p>
         </div>
-        <Button size="sm" onClick={onAddProvider}>
-          <HugeiconsIcon icon={Add01Icon} size={20} strokeWidth={1.5} />
-          Add Provider
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex overflow-hidden rounded-lg border border-primary-200 bg-white text-xs">
+            <button
+              type="button"
+              className={cn(
+                'px-3 py-1.5 font-medium transition-colors',
+                !showOnlyActive
+                  ? 'bg-primary-100 text-primary-900'
+                  : 'text-primary-600 hover:bg-primary-50',
+              )}
+              onClick={() => setShowOnlyActive(false)}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'border-l border-primary-200 px-3 py-1.5 font-medium transition-colors',
+                showOnlyActive
+                  ? 'bg-primary-100 text-primary-900'
+                  : 'text-primary-600 hover:bg-primary-50',
+              )}
+              onClick={() => setShowOnlyActive(true)}
+            >
+              Active only
+            </button>
+          </div>
+          <Button size="sm" onClick={onAddProvider}>
+            <HugeiconsIcon icon={Add01Icon} size={20} strokeWidth={1.5} />
+            Add Provider
+          </Button>
+        </div>
       </header>
 
       <section className="rounded-2xl border border-primary-200 bg-primary-50/80 p-4 shadow-sm md:p-5">
@@ -1290,8 +1350,11 @@ function ProviderManagementSection(props: {
             </p>
           </div>
           <p className="text-xs text-primary-600 tabular-nums">
-            {providerSummaries.length} provider
-            {providerSummaries.length === 1 ? '' : 's'}
+            {displayedProviders.length}
+            {showOnlyActive && providerSummaries.length !== displayedProviders.length
+              ? ` of ${providerSummaries.length}`
+              : ''}{' '}
+            provider{displayedProviders.length === 1 ? '' : 's'}
           </p>
         </div>
 
@@ -1318,7 +1381,7 @@ function ProviderManagementSection(props: {
 
         {!modelsQuery.isPending &&
         !modelsQuery.error &&
-        providerSummaries.length === 0 ? (
+        displayedProviders.length === 0 ? (
           <div className="rounded-xl border border-primary-200 bg-white px-4 py-4">
             <p className="text-sm text-primary-700">
               No providers are configured yet. Use Add Provider to open setup
@@ -1327,9 +1390,9 @@ function ProviderManagementSection(props: {
           </div>
         ) : null}
 
-        {providerSummaries.length > 0 ? (
+        {displayedProviders.length > 0 ? (
           <div className={cn('grid gap-3', embedded ? '' : 'md:grid-cols-2')}>
-            {providerSummaries.map(function mapProvider(provider) {
+            {displayedProviders.map(function mapProvider(provider) {
               const isDeleting = deletingId === provider.id
 
               return (
@@ -1674,7 +1737,7 @@ export function ProvidersScreen({ embedded = false }: ProvidersScreenProps) {
             </TabsList>
 
             <TabsContent value="providers" className="space-y-5">
-              <ActiveModelCard modelOptions={modelOptions} />
+              <ActiveModelCard modelOptions={modelOptions} providerSummaries={providerSummaries} />
               <ProviderManagementSection
                 embedded={embedded}
                 providerSummaries={providerSummaries}

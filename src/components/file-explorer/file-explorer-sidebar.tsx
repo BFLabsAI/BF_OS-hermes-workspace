@@ -13,6 +13,7 @@ import {
   Upload01Icon,
 } from '@hugeicons/core-free-icons'
 import FilePreviewDialog from './file-preview-dialog'
+import { NewFileDialog } from './new-file-dialog'
 import { cn } from '@/lib/utils'
 import {
   ScrollAreaCorner,
@@ -151,6 +152,10 @@ export function FileExplorerSidebar({
   const [promptState, setPromptState] = useState<PromptState | null>(null)
   const [promptValue, setPromptValue] = useState('')
   const [previewPath, setPreviewPath] = useState<string | null>(null)
+  const [newFileDialog, setNewFileDialog] = useState<{ open: boolean; initialPath: string }>({
+    open: false,
+    initialPath: '',
+  })
   const uploadTargetRef = useRef<string>('')
   const uploadInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -244,12 +249,13 @@ export function FileExplorerSidebar({
     [openPrompt],
   )
 
-  const handleNewFile = useCallback(
-    (entry: FileEntry) => {
-      openPrompt({ mode: 'new-file', targetPath: entry.path })
-    },
-    [openPrompt],
-  )
+  const handleNewFile = useCallback((entry: FileEntry) => {
+    // Open the rich folder picker, pre-positioned at the right-clicked folder
+    // (or at the file's parent folder if the user right-clicked a file).
+    const initialPath =
+      entry.type === 'folder' ? entry.path : getParentPath(entry.path)
+    setNewFileDialog({ open: true, initialPath })
+  }, [])
 
   const handleNewFolder = useCallback(
     (entry: FileEntry) => {
@@ -470,7 +476,7 @@ export function FileExplorerSidebar({
           <Button
             size="icon-sm"
             variant="ghost"
-            onClick={() => openPrompt({ mode: 'new-file', targetPath: '' })}
+            onClick={() => setNewFileDialog({ open: true, initialPath: '' })}
             title="New file"
           >
             <HugeiconsIcon icon={PlusSignIcon} size={18} />
@@ -541,9 +547,7 @@ export function FileExplorerSidebar({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() =>
-                    openPrompt({ mode: 'new-file', targetPath: '' })
-                  }
+                  onClick={() => setNewFileDialog({ open: true, initialPath: '' })}
                 >
                   <HugeiconsIcon icon={PlusSignIcon} size={16} />
                   New file
@@ -686,6 +690,24 @@ export function FileExplorerSidebar({
         path={previewPath}
         onClose={() => setPreviewPath(null)}
         onSaved={refresh}
+      />
+
+      <NewFileDialog
+        open={newFileDialog.open}
+        initialPath={newFileDialog.initialPath}
+        onClose={() => setNewFileDialog({ open: false, initialPath: '' })}
+        onCreate={async (parentPath, fileName) => {
+          const newPath = parentPath ? `${parentPath}/${fileName}` : fileName
+          await fetch('/api/files', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action: 'write', path: newPath, content: '' }),
+          })
+          setNewFileDialog({ open: false, initialPath: '' })
+          await refresh()
+          // If parent caller wants to auto-open the new file, signal it
+          if (onFileOpen) onFileOpen(newPath)
+        }}
       />
 
       <button

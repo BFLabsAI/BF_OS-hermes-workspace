@@ -24,7 +24,7 @@ const ROOT_DIRS = [
 ]
 
 const QUICK_COMMANDS = [
-  { label: 'cloudfast', command: 'cloudfast', color: 'text-blue-400' },
+  { label: 'claudefast', command: 'claudefast', color: 'text-blue-400' },
   { label: 'codex', command: 'codex', color: 'text-purple-400' },
   { label: 'opencode', command: 'opencode', color: 'text-emerald-400' },
   { label: 'npm run dev', command: 'npm run dev', color: 'text-red-400' },

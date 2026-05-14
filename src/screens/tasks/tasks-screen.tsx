@@ -1,7 +1,7 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState } from 'react'
-import { useSearch } from '@tanstack/react-router'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useKanbanEvents } from '@/lib/use-kanban-events'
 import { AnimatePresence, motion } from 'motion/react'
@@ -69,8 +69,12 @@ export function TasksScreen() {
   const [viewMode, setViewMode] = useState<'board' | 'list' | 'dashboard'>('board')
 
   const search = useSearch({ from: '/tasks' })
+  const navigate = useNavigate({ from: '/tasks' })
   const initialAssignee = typeof search.assignee === 'string' ? search.assignee : null
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(initialAssignee)
+
+  // Open task from URL param (?task=<id>) once tasks are loaded
+  const openedFromUrl = useRef(false)
 
   const tasksQuery = useQuery({
     queryKey: [...QUERY_KEY, { showArchived }],
@@ -115,6 +119,28 @@ export function TasksScreen() {
   }, [assignees])
 
   const tasks = tasksQuery.data ?? []
+
+  // Auto-open task from ?task=<id> in URL (runs once when tasks load)
+  useEffect(() => {
+    if (openedFromUrl.current) return
+    if (!search.task || tasks.length === 0) return
+    const found = tasks.find((t) => t.id === search.task)
+    if (found) {
+      openedFromUrl.current = true
+      setEditingTask(found)
+    }
+  }, [search.task, tasks])
+
+  // Sync editingTask → URL
+  const openTask = useCallback((task: KanbanTaskSummary) => {
+    setEditingTask(task)
+    void navigate({ search: (prev) => ({ ...prev, task: task.id }), replace: false })
+  }, [navigate])
+
+  const closeTask = useCallback(() => {
+    setEditingTask(null)
+    void navigate({ search: (prev) => { const { task: _, ...rest } = prev; return rest }, replace: true })
+  }, [navigate])
 
   const tasksByStatus = useMemo(() => {
     const map: Record<TaskStatus, KanbanTaskSummary[]> = {
@@ -171,7 +197,7 @@ export function TasksScreen() {
     onSuccess: () => {
       invalidate()
       toast('Task updated')
-      setEditingTask(null)
+      closeTask()
     },
     onError: (e) =>
       toast(e instanceof Error ? e.message : 'Failed to update task', { type: 'error' }),
@@ -182,7 +208,7 @@ export function TasksScreen() {
     onSuccess: () => {
       invalidate()
       toast('Task archived')
-      setEditingTask(null)
+      closeTask()
     },
     onError: (e) =>
       toast(e instanceof Error ? e.message : 'Failed to archive task', { type: 'error' }),
@@ -392,7 +418,7 @@ export function TasksScreen() {
                 : tasks
             }
             assigneeLabels={assigneeLabels}
-            onOpen={(t) => setEditingTask(t)}
+            onOpen={(t) => openTask(t)}
           />
         )}
 
@@ -526,7 +552,7 @@ export function TasksScreen() {
                               assigneeLabels={assigneeLabels}
                               isDragging={draggingId === task.id}
                               onDragStart={(e) => handleDragStart(e, task.id)}
-                              onClick={() => setEditingTask(task)}
+                              onClick={() => openTask(task)}
                             />
                           </motion.div>
                         ))
@@ -556,7 +582,7 @@ export function TasksScreen() {
         <TaskDialog
           open={editingTask !== null}
           onOpenChange={(open) => {
-            if (!open) setEditingTask(null)
+            if (!open) closeTask()
           }}
           task={editingTask}
           assignees={assignees}
