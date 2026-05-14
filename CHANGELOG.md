@@ -1,0 +1,235 @@
+# Changelog — Hermes Workspace
+
+Registro cronológico de todos os ajustes, correções e melhorias realizados no workspace.
+
+---
+
+## Instruções de preenchimento
+
+Cada entrada deve usar um **timestamp ISO 8601 completo** como cabeçalho de seção:
+
+```
+## 2026-05-14T08:20:00+02:00 — Título curto da mudança
+```
+
+- Formato: `AAAA-MM-DDTHH:MM:SS±HH:MM` (data + hora local + offset de fuso)
+- Fuso padrão do servidor: `Europe/Berlin` (CEST `+02:00` no verão, CET `+01:00` no inverno)
+- **Nunca usar apenas a data** — o horário é obrigatório para ordenação e rastreabilidade
+- Entradas dentro do mesmo dia devem ter timestamps distintos
+- Ordem: mais recente no topo
+- Toda entrada deve conter:
+  - **Contexto:** o porquê da mudança em 1–3 linhas
+  - **Arquivos modificados:** lista de paths relativos ao repositório
+  - Descrição agrupada por subsistema, com bullets curtos descrevendo o **o que** mudou
+  - Quando aplicável: notas sobre build, migração, breaking changes ou pontos de atenção
+
+---
+
+## 2026-05-14T08:15:00+02:00 — Files: abertura inline no painel direito (sem popup)
+
+**Contexto:** O clique em arquivo abria um `FilePreviewDialog` (popup). O usuário quer o conteúdo inline no painel direito da rota `/files`, igual a um VS Code minimalista. Pop-up removido; abertura passa por `onFileOpen` no sidebar.
+
+**Arquivos modificados:**
+- `src/routes/files.tsx`
+- `src/components/file-explorer/file-explorer-sidebar.tsx`
+- `src/routes/api/files.ts`
+
+**Sidebar:**
+- Nova prop `onFileOpen(path)` em `FileExplorerSidebar`
+- `handleFileClick` chama `onFileOpen` quando definido; o caminho do popup (`setPreviewPath`) vira fallback apenas se a prop não for passada
+
+**Rota `/files`:**
+- Estado de abertura inline (`openedPath`, `fileContent`, `fileDataUrl`, `fileType`, `loading`, `error`, `dirty`, `saving`)
+- Carregamento via `fetch('/api/files?action=read&path=...')` quando `openedPath` muda; cancelamento em re-execução para evitar race
+- Render no painel direito:
+  - Texto → `<Editor>` (Monaco) com `path={openedPath}`, `language` detectado por extensão (mapa expandido: TS/JS/Py/Go/Rust/Shell/Dockerfile/YAML/TOML/INI/SQL/etc.)
+  - Imagem → `<img>` com `max-h-full max-w-full`
+  - Estado vazio → ícone + "No file open"
+  - Loading → spinner; erro → mensagem em rosa com path em monospace
+- Header da página mostra path do arquivo em fonte monoespaçada, badge `● unsaved` quando dirty, botão **Save** (mostrado só para `fileType==='text'`, desabilitado quando não há mudanças)
+- Atalho global `Ctrl+S` / `Cmd+S` salva o arquivo aberto
+
+**API `/api/files?action=read`:**
+- Recusa diretórios (`400` "Is a directory")
+- Tamanho máximo de leitura: **8 MiB** (`413` com mensagem explicando o limite)
+- Detecção de binário: NUL no primeiro sample de 8 KiB → `415` "Binary file — preview not supported"
+- Imagens continuam sendo retornadas como `data:` URL base64
+
+---
+
+## 2026-05-14T07:40:00+02:00 — Files: navegação em `/root` com lazy-load e dot-files
+
+**Contexto:** O `FileExplorerSidebar` só mostrava `~/.hermes` e filtrava dot-files. O usuário quer navegar `/root` inteiro com pastas colapsadas por padrão (lazy-fetch ao clicar) e poder criar arquivos/pastas pelo botão ou pelo menu de contexto.
+
+**Arquivos modificados:**
+- `src/routes/api/files.ts`
+- `src/components/file-explorer/file-explorer-sidebar.tsx`
+
+**API:**
+- `WORKSPACE_ROOT` agora é `process.env.HERMES_WORKSPACE_DIR` || `os.homedir()` || `/root`
+- `IGNORED_DIRS` reduzido para apenas `node_modules` (dot-files visíveis: `.git`, `.hermes`, `.bashrc`, etc.)
+- `DEFAULT_DIRECTORY_DEPTH = 1` — leitura inicial vai apenas um nível abaixo
+- `readDirectory` empurra pastas **sem `children`** quando atinge o limite de profundidade, sinalizando à UI que o conteúdo está pendente de fetch
+
+**UI:**
+- `fetchFileTree(targetPath?)` aceita `path` para lazy-fetch direto
+- `attachChildren(tree, targetPath, children)` mescla a resposta da pasta clicada no lugar certo da árvore (preserva o resto)
+- `toggleFolder(entry)` é async: ao expandir pela primeira vez (`entry.children === undefined`), busca os filhos e seta `loadingPaths` para mostrar `…` no header da pasta
+- Pastas vazias após expandir mostram `(empty)` em itálico
+- `ROOT_LABEL` mudou de `Workspace` para `/root`
+- Menu de contexto (rename / new file / new folder / upload / download / delete) e botão `+` já existiam — continuam funcionando
+
+---
+
+## 2026-05-14T07:35:00+02:00 — Terminal: corrige `failed to connect` via Cloudflare tunnel
+
+**Contexto:** Acessando pelo Cloudflare tunnel com `TRUST_PROXY=1`, `getRequestIp` lê o IP público do `x-forwarded-for`, que **não** passa em `isLocalRequest`. A rota `/api/terminal-stream` usava `requireLocalOrAuth`, então o stream retornava 401, e `terminal-resize` 404 em cascata.
+
+**Arquivos modificados:**
+- `src/routes/api/terminal-stream.ts`
+
+**Mudança:**
+- `requireLocalOrAuth` → `isAuthenticated`, alinhando com `terminal-input`, `terminal-resize` e `terminal-close`
+- Comportamento agora é o mesmo do resto do workspace: sem `HERMES_PASSWORD` setado tudo passa; com senha, exige cookie de sessão válido
+
+---
+
+## 2026-05-14T07:20:00+02:00 — Logs: aba "Hermes Logs" com tail dos arquivos em `~/.hermes/logs/`
+
+**Contexto:** Logs do workspace Node não são os mesmos do agent Python. Usuário quer ver ambos: workspace internals **e** logs do Hermes (gateway, runs, erros). Página `/logs` agora tem **duas abas**.
+
+**Arquivos novos:**
+- `src/server/hermes-log-tailer.ts`
+- `src/routes/api/hermes-logs.ts`
+- `src/routes/api/hermes-logs-stream.ts`
+
+**Arquivos modificados:**
+- `src/screens/logs/logs-screen.tsx`
+
+**Tailer:**
+- Acompanha `agent.log`, `errors.log`, `gateway.log` em `~/.hermes/logs/`
+- Estratégia: ler tail inicial (300 linhas) + `fs.watch` para detectar appends; lê apenas os bytes novos via `offset`
+- Detecta truncate/rotate (size < offset) e reseta
+- Ring buffer de 5 000 linhas em `globalThis.__hermesTailer` (mesma estratégia do log-store para cruzar fronteiras de chunk do Vite)
+- `detectLevel(raw)` infere nível pelo padrão `ERROR|WARNING|DEBUG` na linha
+
+**Endpoints:**
+- `GET /api/hermes-logs` — JSON com filtros (`limit`, `source`, `level`, `search`, `since`)
+- `GET /api/hermes-logs-stream` — SSE; envia history (tail) + cada nova linha como `event: log`
+
+**UI:**
+- Tabs `Workspace Logs` / `Hermes Logs` (ambas montadas — SSE permanece conectado ao trocar de aba)
+- Aba Hermes tem filtro extra de source (`All` / `Agent` / `Gateway` / `Errors`)
+- Componente compartilhado: `Toolbar`, `LogTable`
+
+---
+
+## 2026-05-14T07:05:00+02:00 — Logs: instrumentação ampla do workspace
+
+**Contexto:** Pedido explícito — "logs de tudo, chamadas de API, todas as funções, tudo que o workspace tem". Interceptação isolada do `console.*` não basta; precisa cobrir HTTP de entrada e chamadas de saída.
+
+**Arquivos modificados:**
+- `server-entry.js`
+- `src/server/gateway-capabilities.ts`
+- `src/server/log-store.ts`
+- `src/server/hermes-log-tailer.ts`
+
+**HTTP de entrada (`server-entry.js`):**
+- `res.on('finish', …)` loga `[http] METHOD url → status (ms)` para cada request
+- `SILENT_PREFIXES` (`/assets/`, `/api/logs-stream`, `/api/kanban-events`, `/api/chat-events`) suprime ruído de SSE e estáticos
+
+**Saída ao Hermes (`gateway-capabilities.ts`):**
+- `dashboardFetch` agora loga `[dashboard] METHOD path → status (ms)` antes de retornar
+- `ensureLogStoreStarted()` chamado no topo do módulo — garante interceptor de `console.*` ativo desde o load do chunk
+
+**Compartilhamento entre chunks Vite:**
+- `log-store` e `hermes-log-tailer` migrados de variáveis de módulo para `globalThis.__hermesLogStore` / `globalThis.__hermesTailer`
+- Sem isso, cada chunk recebia uma cópia isolada do ring buffer — quem patcheava `console.*` no chunk router não compartilhava ring com o handler de `/api/logs`
+
+**API endpoint:**
+- `/api/logs` (GET) agora lê do **arquivo persistido** (`~/.hermes/workspace-logs.jsonl`) em vez do ring em memória — bypassa qualquer dúvida sobre cross-chunk e ainda traz a história inteira do processo
+
+---
+
+## 2026-05-14T06:50:00+02:00 — Logs: página `/logs` (Workspace Logs)
+
+**Contexto:** Nova página no menu para ver logs verbosos do servidor Node em tempo real. Sem dependência nova (SQLite descartado — usa JSONL append-only).
+
+**Arquivos novos:**
+- `src/server/log-store.ts`
+- `src/routes/api/logs.ts`
+- `src/routes/api/logs-stream.ts`
+- `src/routes/logs.tsx`
+- `src/screens/logs/logs-screen.tsx`
+
+**Arquivos modificados:**
+- `src/screens/chat/components/chat-sidebar.tsx`
+- `src/components/workspace-shell.tsx`
+
+**Log store:**
+- Intercepta `console.log/info/warn/error/debug` globalmente
+- Ring buffer de 5 000 entradas (`LogEntry { id, ts, level, source, msg }`)
+- Persistência em `~/.hermes/workspace-logs.jsonl` (NDJSON, append batched via `setImmediate`)
+- `subscribeToLogs(cb)` para fan-out a SSE; flag `writing` evita recursão infinita quando um subscriber loga algo
+- `tag(args)` extrai o prefixo `[xxx]` da primeira string como `source` (`[gateway] foo` → `source: gateway`)
+
+**Endpoints:**
+- `GET /api/logs` — JSON, lê do arquivo, filtros `limit`/`level`/`search`
+- `GET /api/logs-stream` — SSE com history + subscriber live
+
+**UI:**
+- Tema dark monospace, linha por entrada (`time | LEVEL pill | source | msg`)
+- Toggle Live/Paused com pulse dot
+- Filtro por nível (all/error/warn/info/debug), busca por texto, contador `shown / total`
+- Botão Clear; botão "↓ Bottom" aparece quando o usuário rola para cima
+
+**Navegação:**
+- Item "Logs" adicionado em `systemItems` da `chat-sidebar` com ícone `ConsoleIcon`
+- `workspace-shell` reconhece `/logs` no `getTabIndex` (índice 11) e no título de página mobile
+
+---
+
+## 2026-05-14T05:45:00+02:00 — Task card: exibe `result` quando a tarefa conclui
+
+**Contexto:** Worker concluía tarefa via `kanban_complete(result=...)`, mas o card no kanban ficava vazio. `latest_summary` aparecia, mas o resultado em si (`tasks.result`) não.
+
+**Arquivos modificados:**
+- `src/screens/tasks/task-card.tsx`
+
+**Mudança:**
+- Quando `task.status === 'done' && task.result`, renderiza box verde (`bg-emerald-500/10 text-emerald-400`) com `line-clamp-3` mostrando o resultado
+- Fallback para `latest_summary` quando `result` é null (tarefa ainda não concluída ou worker não preencheu `result`)
+
+---
+
+## 2026-05-14T01:30:00+02:00 — Kanban migration: workspace passa a ser proxy do dashboard plugin
+
+**Contexto:** Implementação completa do plano em `BF Labs/Projetos internos/hermes-workspace/SWARM/kanban-migration.md`. Pivô arquitetural: em vez de reimplementar o store SQLite em TS, o workspace passa a proxiar o plugin `kanban` do dashboard (~30 endpoints + WebSocket de eventos). Elimina duplicação de dispatcher, CAS predicates, WAL e broadcast.
+
+**Arquivos novos:**
+- `src/lib/kanban-types.ts` (tipos canônicos espelhando o schema Python)
+- `src/server/hermes-kanban-api.ts` (cliente para os 30 endpoints do plugin)
+- `src/server/kanban-event-bus.ts` (singleton WS cliente → fan-out SSE)
+- `src/lib/use-kanban-events.ts` (hook React para SSE `/api/kanban-events`)
+- `src/screens/tasks/list-view.tsx`
+- `src/screens/tasks/dashboard-view.tsx`
+- `src/screens/tasks/dispatcher-panel.tsx`
+- `src/screens/chat/hooks/use-chat-kanban-toasts.ts`
+
+**Arquivos modificados:**
+- `src/lib/tasks-api.ts` (reescrito com `fetchBoard`, `fetchTaskDetail`, `archiveTask`, `nudgeDispatcher`; aliases legados preservados)
+- `src/screens/tasks/task-card.tsx` (status pill, P0–P3 badge, comment count, link counts, body + latest_summary preview)
+- `src/screens/tasks/task-dialog.tsx` (4 tabs: Details / Comments / Events / Runs)
+- `src/screens/tasks/tasks-screen.tsx` (7 colunas: `triage|todo|ready|running|blocked|done|archived`, view switcher board/list/dashboard, SSE live refresh)
+
+**Arquivos removidos:**
+- `src/routes/api/hermes-tasks.ts`
+- `src/routes/api/hermes-tasks.$taskId.ts`
+- `src/routes/api/hermes-tasks-assignees.ts`
+- `src/stores/tasks-store.ts`
+
+**Pontos de atenção:**
+- Auth do dashboard plugin via `HERMES_DASHBOARD_TOKEN` no `.env`; o token é rotacionado pelo dashboard no restart — quando o WS bate 401/403, `kanban-event-bus` faz `force: true` no `fetchDashboardToken()` e refaz a conexão (backoff exponencial)
+- Toasts no chat para 14 kinds de evento kanban via `use-chat-kanban-toasts`
+- `recharts` Pie/Cell apresentou erro de tipos no build; contornado substituindo o pie de status por barra empilhada CSS pura no `dashboard-view`
+- Timestamps em **segundos** (epoch s), não ms — consistente com o schema Python
