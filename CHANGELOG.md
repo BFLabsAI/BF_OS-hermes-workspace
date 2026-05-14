@@ -25,6 +25,92 @@ Cada entrada deve usar um **timestamp ISO 8601 completo** como cabeçalho de se�
 
 ---
 
+## 2026-05-14T11:50:00+02:00 — Files: substituição do Monaco pelo CodeMirror 6
+
+**Contexto:** Apesar de várias tentativas (correção da CSP, modo uncontrolled, `key` por arquivo, remoção do `padding`), o Monaco continuava com problemas — cursor invisível em alguns casos, click desalinhado, Enter saltando para a última linha. Decisão: substituir Monaco por CodeMirror 6, que é mais leve, totalmente local (zero CDN) e tem handling de cursor mais previsível.
+
+**Arquivos modificados:**
+- `src/routes/files.tsx` (reescrito do zero usando `@uiw/react-codemirror`)
+- `src/styles.css` (removido `markdown-preview` CSS, não é mais usado)
+
+**Dependências adicionadas (em `node_modules`):**
+- `@uiw/react-codemirror` + `@codemirror/{state,view,language,commands,search,autocomplete}`
+- Language packs: `lang-javascript`, `lang-markdown`, `lang-json`, `lang-python`, `lang-css`, `lang-html`, `lang-yaml`, `lang-sql`, `lang-rust`, `lang-go`, `lang-cpp`, `lang-xml`, `lang-php`, `lang-java`
+- Theme: `@codemirror/theme-one-dark`
+- Transitivas: `@lezer/*`, `@marijn/*`, `style-mod`, `crelt`, `w3c-keyname`, `@babel/runtime`
+
+**Editor:**
+- Tema One Dark (estilo VS Code) com fundo `#1e1e2e`, gutters `#181825`
+- Cursor ciano (`#7dd3fc`) de 2px, animado, sempre visível
+- Active-line highlight + active-line-gutter
+- JetBrains Mono, line-height 1.55, font-size do setting global
+- Auto-features ativas: bracket matching, close-brackets, autocomplete, code folding, indent-on-input, line wrapping (toggle via setting)
+- Sem cursor jumping: editor é controlado via `value`/`onChange` direto — CodeMirror lida bem com isso (diferente do Monaco)
+- Suporte a 15+ linguagens via switch em `getLanguageExtension(path)`
+- Mantém: imagens inline, mensagens de erro, atalho `Ctrl/Cmd+S` para salvar
+
+**Pontos de atenção:**
+- Pacotes foram instalados em `/tmp` com npm e copiados para `node_modules/` porque o projeto usa pnpm com mismatch de store version entre v10 (atual) e v11 (instalado pelo pnpm 11). Para reinstalar do zero seria necessário regenerar o `pnpm-lock.yaml` e fazer `pnpm install` completo
+- O Monaco (`@monaco-editor/react`) continua em `package.json` mas não é mais referenciado — pode ser removido em uma limpeza futura
+
+---
+
+## 2026-05-14T11:30:00+02:00 — Terminal: fix Enter não envia comando (stale closure)
+
+**Contexto:** Depois de abrir o novo dialog de terminal e digitar qualquer comando, pressionar Enter não executava nada. Causa raiz: classic stale closure. `terminal.onData(cb)` no xterm é registrado **uma vez** na inicialização. O `cb` capturava `handleSendInput`, que por sua vez tinha `[tabs]` como dependência. Quando a sessão SSE conectava e gravava `sessionId` no tab, o estado `tabs` atualizava — mas o callback registrado no xterm continuava com a referência velha de `handleSendInput`, em que `tab.sessionId === undefined`, então o `fetch('/api/terminal-input')` nunca era chamado.
+
+**Arquivos modificados:**
+- `src/components/terminal/terminal-panel.tsx`
+
+**Correção:**
+- Novo `tabsRef = useRef(tabs)` sincronizado via `useEffect`
+- `handleSendInput` agora lê de `tabsRef.current` (sem dependências reativas)
+- `useCallback` de `handleSendInput` passou a ter deps vazias (`[]`) — referência estável, nunca fica obsoleto
+- `initializeTerminal` removeu `tabs` das deps (não precisa mais re-criar quando tabs muda)
+
+---
+
+## 2026-05-14T11:15:00+02:00 — Files: editor não-controlado com cursor jumping resolvido + preview Markdown (descontinuado depois)
+
+**Contexto:** Usuário reportou cursor pulando ao digitar e linha sendo selecionada incorretamente. Causa: Monaco em modo controlado (`value` + `onChange`) recebia o state de volta a cada keystroke, reposicionando o cursor. Tentativa de fix: usar `defaultValue` + `key={openedPath}` para isolar o ciclo, e adicionar split-view de preview para arquivos `.md`. Funcionou parcialmente — cursor jumping melhorou mas outros problemas do Monaco persistiam (ver entrada de 11:50 com migração para CodeMirror).
+
+**Arquivos modificados (subsequentemente substituídos):**
+- `src/routes/files.tsx`
+- `src/styles.css` (adicionado `.markdown-preview` com estilo manual, sem `@tailwindcss/typography`)
+
+**Mudanças que ficaram:**
+- Removido `@monaco-editor/react`'s `padding: { top, bottom }` que desalinhava hit areas
+- `JetBrains Mono` adotado como fonte do editor
+- Detecção de tipo Markdown via extensão `.md` / `.mdx`
+
+---
+
+## 2026-05-14T11:00:00+02:00 — Tasks/Kanban: URL com `?task=<id>` para deep-link
+
+**Contexto:** Ao abrir uma tarefa, a URL não refletia qual task estava aberta — impossível compartilhar link direto para uma tarefa específica. Pedido: sincronizar `editingTask` com query param `?task=<id>` na URL, com `replace` no fechar para não poluir history.
+
+**Arquivos modificados:**
+- `src/routes/tasks.tsx` (adicionado `task` ao `searchSchema`)
+- `src/screens/tasks/tasks-screen.tsx`
+
+**Mudanças:**
+- Novo helper `openTask(task)` faz `setEditingTask` + `navigate({ search: prev => ({...prev, task: task.id }) })`
+- Novo helper `closeTask()` faz `setEditingTask(null)` + `navigate({ search: prev => { delete prev.task; return prev } }, { replace: true })`
+- `useEffect` faz auto-open quando `search.task` está presente e a task existe no array `tasks` — guarded por `openedFromUrl.current` para não reabrir após fechar manualmente
+- Callbacks de mutations (`updateMutation.onSuccess`, `archiveMutation.onSuccess`) agora chamam `closeTask()` em vez de `setEditingTask(null)`
+- Substituídos os handlers de `setEditingTask(task)` em `TaskCard.onClick` (board) e `ListView.onOpen` por `openTask(task)`
+
+---
+
+## 2026-05-14T10:35:00+02:00 — Terminal: fix typo `cloudfast` → `claudefast`
+
+**Contexto:** Quick command no dialog de novo terminal mostrava `cloudfast` em vez do nome correto do CLI `claudefast`.
+
+**Arquivos modificados:**
+- `src/components/terminal/new-terminal-dialog.tsx`
+
+---
+
 ## 2026-05-14T10:30:00+02:00 — Terminal: dialog de novo terminal com seletor de diretório e comandos rápidos
 
 **Contexto:** Ao abrir um novo terminal (botão `+`), o terminal sempre abria em `~/.hermes` sem nenhuma opção de configuração. Usuário pediu um popup para escolher o diretório e opcionalmente executar um comando ao abrir.

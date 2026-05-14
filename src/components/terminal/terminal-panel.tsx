@@ -75,6 +75,9 @@ export function TerminalPanel({ isMobile }: TerminalPanelProps) {
   // Mirror activeTabId in a ref so the long-lived SSE reader closure can
   // check the current value without forcing the whole effect to re-run.
   const activeTabIdRef = useRef<string | undefined>(undefined)
+  // Mirror tabs in a ref so terminal.onData closures always see the latest
+  // sessionId without needing to re-register onData every time tabs changes.
+  const tabsRef = useRef(tabs)
 
   useEffect(() => {
     window.localStorage.setItem(PANEL_OPEN_KEY, String(isOpen))
@@ -95,6 +98,10 @@ export function TerminalPanel({ isMobile }: TerminalPanelProps) {
       window.localStorage.setItem(ACTIVE_TAB_KEY, activeTabId)
     }
   }, [activeTabId])
+
+  useEffect(() => {
+    tabsRef.current = tabs
+  }, [tabs])
 
   const activeTab = useMemo(
     () => tabs.find((tab) => tab.id === activeTabId) ?? tabs[0],
@@ -173,7 +180,10 @@ export function TerminalPanel({ isMobile }: TerminalPanelProps) {
 
   const handleSendInput = useCallback(
     async (tabId: string, data: string) => {
-      const tab = tabs.find((item) => item.id === tabId)
+      // Use tabsRef so this callback never goes stale — terminal.onData is
+      // registered once on init and would otherwise close over the old tabs
+      // value where sessionId was still null.
+      const tab = tabsRef.current.find((item) => item.id === tabId)
       if (!tab?.sessionId) return
       await fetch('/api/terminal-input', {
         method: 'POST',
@@ -181,7 +191,7 @@ export function TerminalPanel({ isMobile }: TerminalPanelProps) {
         body: JSON.stringify({ sessionId: tab.sessionId, data }),
       }).catch(() => undefined)
     },
-    [tabs],
+    [],
   )
 
   const initializeTerminal = useCallback(
@@ -222,7 +232,7 @@ export function TerminalPanel({ isMobile }: TerminalPanelProps) {
       fitMap.current.set(tabId, fitAddon)
       searchMap.current.set(tabId, searchAddon)
     },
-    [handleSendInput, tabs],
+    [handleSendInput],
   )
 
   const connectSession = useCallback(async (tabId: string) => {

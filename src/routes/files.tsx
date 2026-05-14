@@ -1,35 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Editor, type OnMount } from '@monaco-editor/react'
-import type * as Monaco from 'monaco-editor'
+import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror'
+import { oneDark } from '@codemirror/theme-one-dark'
+import { EditorView } from '@codemirror/view'
+import { javascript } from '@codemirror/lang-javascript'
+import { markdown } from '@codemirror/lang-markdown'
+import { json } from '@codemirror/lang-json'
+import { python } from '@codemirror/lang-python'
+import { css } from '@codemirror/lang-css'
+import { html } from '@codemirror/lang-html'
+import { yaml } from '@codemirror/lang-yaml'
+import { sql } from '@codemirror/lang-sql'
+import { rust } from '@codemirror/lang-rust'
+import { go } from '@codemirror/lang-go'
+import { cpp } from '@codemirror/lang-cpp'
+import { xml } from '@codemirror/lang-xml'
+import { php } from '@codemirror/lang-php'
+import { java } from '@codemirror/lang-java'
+import type { Extension } from '@codemirror/state'
 import { createFileRoute } from '@tanstack/react-router'
 import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  File01Icon,
-  Folder01Icon,
-  FloppyDiskIcon,
-  SourceCodeIcon,
-  ViewIcon,
-  LayoutLeftIcon,
-} from '@hugeicons/core-free-icons'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import remarkBreaks from 'remark-breaks'
+import { File01Icon, Folder01Icon, FloppyDiskIcon } from '@hugeicons/core-free-icons'
 import { usePageTitle } from '@/hooks/use-page-title'
 import { FileExplorerSidebar } from '@/components/file-explorer'
-import { resolveTheme, useSettings } from '@/hooks/use-settings'
+import { useSettings } from '@/hooks/use-settings'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-
-const LANGUAGE_MAP: Record<string, string> = {
-  ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript',
-  json: 'json', md: 'markdown', mdx: 'markdown', css: 'css', html: 'html',
-  yml: 'yaml', yaml: 'yaml', py: 'python', go: 'go', rs: 'rust',
-  sh: 'shell', bash: 'shell', toml: 'ini', ini: 'ini',
-  sql: 'sql', xml: 'xml', dockerfile: 'dockerfile',
-  c: 'c', cpp: 'cpp', h: 'cpp', java: 'java', kt: 'kotlin',
-  swift: 'swift', php: 'php', rb: 'ruby', lua: 'lua',
-  txt: 'plaintext', log: 'plaintext', conf: 'shell',
-}
 
 function getExtension(p: string): string {
   const base = p.split('/').pop() || ''
@@ -41,16 +35,44 @@ function isImageFile(p: string): boolean {
   return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(getExtension(p))
 }
 
-function isMarkdownFile(p: string): boolean {
-  return ['md', 'mdx'].includes(getExtension(p))
-}
-
-function getLanguage(p: string): string {
-  if (!p) return 'plaintext'
+function getLanguageExtension(p: string): Extension[] {
+  const ext = getExtension(p)
   const base = (p.split('/').pop() || '').toLowerCase()
-  if (base === 'dockerfile') return 'dockerfile'
-  if (base.startsWith('.bash') || base === '.profile' || base === '.zshrc' || base === '.env') return 'shell'
-  return LANGUAGE_MAP[getExtension(p)] || 'plaintext'
+  switch (ext) {
+    case 'ts': case 'tsx':
+      return [javascript({ jsx: true, typescript: true })]
+    case 'js': case 'jsx': case 'mjs': case 'cjs':
+      return [javascript({ jsx: true })]
+    case 'md': case 'mdx':
+      return [markdown()]
+    case 'json':
+      return [json()]
+    case 'py':
+      return [python()]
+    case 'css': case 'scss': case 'less':
+      return [css()]
+    case 'html': case 'htm':
+      return [html()]
+    case 'yml': case 'yaml':
+      return [yaml()]
+    case 'sql':
+      return [sql()]
+    case 'rs':
+      return [rust()]
+    case 'go':
+      return [go()]
+    case 'c': case 'cpp': case 'cc': case 'h': case 'hpp':
+      return [cpp()]
+    case 'xml': case 'svg':
+      return [xml()]
+    case 'php':
+      return [php()]
+    case 'java': case 'kt':
+      return [java()]
+    default:
+      if (base === 'dockerfile') return []
+      return []
+  }
 }
 
 export const Route = createFileRoute('/files')({
@@ -58,31 +80,60 @@ export const Route = createFileRoute('/files')({
   component: FilesRoute,
 })
 
-type MarkdownMode = 'split' | 'editor' | 'preview'
-
 function FilesRoute() {
   usePageTitle('Files')
   const { settings } = useSettings()
   const [isMobile, setIsMobile] = useState(false)
   const [fileExplorerCollapsed, setFileExplorerCollapsed] = useState(false)
   const [openedPath, setOpenedPath] = useState<string | null>(null)
-  // fileContent holds the latest value for save — NOT fed back into Monaco (avoids cursor jump)
-  const fileContentRef = useRef<string>('')
-  const [initialContent, setInitialContent] = useState<string>('')
+  const [content, setContent] = useState<string>('')
   const [fileDataUrl, setFileDataUrl] = useState<string>('')
   const [fileType, setFileType] = useState<'text' | 'image' | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [markdownMode, setMarkdownMode] = useState<MarkdownMode>('split')
-  // live markdown preview content (kept in sync via onChange)
-  const [markdownPreview, setMarkdownPreview] = useState<string>('')
-  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null)
+  const cmRef = useRef<ReactCodeMirrorRef>(null)
 
-  const resolvedTheme = resolveTheme(settings.theme)
-  const language = useMemo(() => getLanguage(openedPath || ''), [openedPath])
-  const isMarkdown = openedPath ? isMarkdownFile(openedPath) : false
+  const langExtensions = useMemo(
+    () => (openedPath ? getLanguageExtension(openedPath) : []),
+    [openedPath],
+  )
+
+  const extensions = useMemo<Extension[]>(() => {
+    const base: Extension[] = [
+      EditorView.lineWrapping,
+      EditorView.theme({
+        '&': {
+          height: '100%',
+          fontSize: `${settings.editorFontSize ?? 14}px`,
+        },
+        '.cm-scroller': {
+          fontFamily: '"JetBrains Mono", Menlo, Monaco, Consolas, monospace',
+          lineHeight: '1.55',
+        },
+        '.cm-content': { caretColor: '#7dd3fc' },
+        '.cm-cursor, .cm-dropCursor': {
+          borderLeftWidth: '2px',
+          borderLeftColor: '#7dd3fc',
+        },
+        '&.cm-focused .cm-cursor': { borderLeftColor: '#7dd3fc' },
+        '.cm-activeLine': { backgroundColor: 'rgba(125, 211, 252, 0.07)' },
+        '.cm-gutters': {
+          backgroundColor: '#181825',
+          color: '#6c7086',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+        },
+        '.cm-activeLineGutter': { backgroundColor: 'rgba(125, 211, 252, 0.07)' },
+      }),
+      ...langExtensions,
+    ]
+    if (!settings.editorWordWrap) {
+      // override: remove lineWrapping by replacing with a no-op (lineWrapping is just an extension)
+      base[0] = EditorView.theme({})
+    }
+    return base
+  }, [langExtensions, settings.editorFontSize, settings.editorWordWrap])
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 767px)')
@@ -93,15 +144,12 @@ function FilesRoute() {
   }, [])
 
   useEffect(() => {
-    if (!isMobile) return
-    setFileExplorerCollapsed(true)
+    if (isMobile) setFileExplorerCollapsed(true)
   }, [isMobile])
 
   useEffect(() => {
     if (!openedPath) {
-      fileContentRef.current = ''
-      setInitialContent('')
-      setMarkdownPreview('')
+      setContent('')
       setFileDataUrl('')
       setFileType(null)
       setError(null)
@@ -115,25 +163,19 @@ function FilesRoute() {
     setDirty(false)
     ;(async () => {
       try {
-        const res = await fetch(
-          `/api/files?action=read&path=${encodeURIComponent(openedPath)}`,
-        )
+        const res = await fetch(`/api/files?action=read&path=${encodeURIComponent(openedPath)}`)
         if (!res.ok) {
-          const errBody = await res.json().catch(() => ({}))
-          throw new Error((errBody as { error?: string }).error || `Failed to read (${res.status})`)
+          const body = await res.json().catch(() => ({})) as { error?: string }
+          throw new Error(body.error || `Error ${res.status}`)
         }
-        const data = (await res.json()) as { type: 'text' | 'image'; content: string }
+        const data = await res.json() as { type: 'text' | 'image'; content: string }
         if (cancelled) return
         if (data.type === 'image') {
           setFileDataUrl(data.content)
-          fileContentRef.current = ''
-          setInitialContent('')
-          setMarkdownPreview('')
+          setContent('')
           setFileType('image')
         } else {
-          fileContentRef.current = data.content
-          setInitialContent(data.content)
-          setMarkdownPreview(data.content)
+          setContent(data.content)
           setFileDataUrl('')
           setFileType('text')
         }
@@ -148,16 +190,10 @@ function FilesRoute() {
     return () => { cancelled = true }
   }, [openedPath])
 
-  const handleEditorMount: OnMount = useCallback((editor) => {
-    editorRef.current = editor
-  }, [])
-
-  const handleEditorChange = useCallback((value: string | undefined) => {
-    const v = value ?? ''
-    fileContentRef.current = v
+  const handleChange = useCallback((value: string) => {
+    setContent(value)
     setDirty(true)
-    if (isMarkdown) setMarkdownPreview(v)
-  }, [isMarkdown])
+  }, [])
 
   const handleSave = useCallback(async () => {
     if (!openedPath || fileType !== 'text') return
@@ -166,7 +202,7 @@ function FilesRoute() {
       const res = await fetch('/api/files', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'write', path: openedPath, content: fileContentRef.current }),
+        body: JSON.stringify({ action: 'write', path: openedPath, content }),
       })
       if (!res.ok) throw new Error('Save failed')
       setDirty(false)
@@ -175,7 +211,7 @@ function FilesRoute() {
     } finally {
       setSaving(false)
     }
-  }, [openedPath, fileType])
+  }, [openedPath, fileType, content])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -188,170 +224,91 @@ function FilesRoute() {
     return () => window.removeEventListener('keydown', handler)
   }, [openedPath, dirty, handleSave])
 
-  const monacoEditor = (
-    <Editor
-      key={openedPath ?? '__empty'}
-      height="100%"
-      theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs-light'}
-      language={language}
-      defaultValue={initialContent}
-      onMount={handleEditorMount}
-      onChange={handleEditorChange}
-      options={{
-        minimap: { enabled: settings.editorMinimap },
-        fontSize: settings.editorFontSize ?? 14,
-        lineHeight: 1.6,
-        scrollBeyondLastLine: false,
-        wordWrap: settings.editorWordWrap ? 'on' : 'off',
-        smoothScrolling: true,
-        cursorSmoothCaretAnimation: 'on',
-        cursorBlinking: 'smooth',
-        renderLineHighlight: 'all',
-        padding: { top: 12, bottom: 12 },
-        fontLigatures: true,
-        bracketPairColorization: { enabled: true },
-        guides: { bracketPairs: true, indentation: true },
-        occurrencesHighlight: 'multiFile',
-        scrollbar: {
-          verticalScrollbarSize: 8,
-          horizontalScrollbarSize: 8,
-        },
-      }}
-    />
-  )
-
-  const markdownPreviewPane = (
-    <div className="h-full overflow-y-auto px-8 py-6 markdown-preview">
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
-        {markdownPreview}
-      </ReactMarkdown>
-    </div>
-  )
-
   return (
-    <div className="h-full min-h-0 overflow-hidden bg-surface text-primary-900">
-      <div className="flex h-full min-h-0 overflow-hidden">
-        <FileExplorerSidebar
-          collapsed={fileExplorerCollapsed}
-          onToggle={() => setFileExplorerCollapsed((prev) => !prev)}
-          onInsertReference={() => {}}
-          onFileOpen={(p) => {
-            setOpenedPath(p)
-            if (isMobile) setFileExplorerCollapsed(true)
-          }}
-        />
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* Header */}
-          <header className="flex items-center gap-2 border-b border-primary-200 px-3 py-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setFileExplorerCollapsed((prev) => !prev)}
-              className="rounded-lg p-1.5 text-primary-500 hover:bg-primary-100 hover:text-primary-800 transition-colors shrink-0"
-              title={fileExplorerCollapsed ? 'Show files' : 'Hide files'}
+    <div className="h-full min-h-0 flex overflow-hidden bg-[#1e1e2e] text-primary-100">
+      <FileExplorerSidebar
+        collapsed={fileExplorerCollapsed}
+        onToggle={() => setFileExplorerCollapsed((p) => !p)}
+        onInsertReference={() => {}}
+        onFileOpen={(p) => {
+          setOpenedPath(p)
+          if (isMobile) setFileExplorerCollapsed(true)
+        }}
+      />
+
+      <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10 bg-[#181825] shrink-0">
+          <button
+            type="button"
+            onClick={() => setFileExplorerCollapsed((p) => !p)}
+            className="p-1.5 rounded text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors shrink-0"
+            title={fileExplorerCollapsed ? 'Show files' : 'Hide files'}
+          >
+            <HugeiconsIcon icon={Folder01Icon} size={16} strokeWidth={1.5} />
+          </button>
+
+          <HugeiconsIcon icon={File01Icon} size={13} className="text-white/30 shrink-0" />
+          <span className="flex-1 min-w-0 text-xs font-mono text-white/60 truncate">
+            {openedPath ? `/${openedPath}` : <span className="italic text-white/30">No file selected</span>}
+          </span>
+          {dirty && <span className="text-[11px] text-amber-400 shrink-0">●</span>}
+
+          {openedPath && fileType === 'text' && (
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={!dirty || saving}
+              className="shrink-0 h-6 text-xs px-2.5 bg-white/10 hover:bg-white/20 text-white/80 border-0"
             >
-              <HugeiconsIcon icon={Folder01Icon} size={18} strokeWidth={1.5} />
-            </button>
+              <HugeiconsIcon icon={FloppyDiskIcon} size={12} />
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          )}
+        </div>
 
-            <div className="min-w-0 flex-1 flex items-center gap-2">
-              <HugeiconsIcon icon={File01Icon} size={14} className="text-primary-400 shrink-0" />
-              <span className="text-xs font-mono text-primary-700 truncate">
-                {openedPath
-                  ? `/${openedPath}`
-                  : <span className="italic text-primary-400">No file selected</span>
-                }
-              </span>
-              {dirty && <span className="text-[11px] text-amber-500 shrink-0 font-medium">● unsaved</span>}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {!openedPath ? (
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-white/20">
+              <HugeiconsIcon icon={File01Icon} size={36} strokeWidth={1.2} />
+              <p className="text-sm">Select a file to edit</p>
             </div>
-
-            {/* Markdown mode toggle */}
-            {openedPath && isMarkdown && fileType === 'text' && !loading && !error && (
-              <div className="flex items-center gap-0.5 border border-primary-200 rounded-lg p-0.5 shrink-0">
-                <button
-                  type="button"
-                  title="Editor only"
-                  onClick={() => setMarkdownMode('editor')}
-                  className={cn(
-                    'p-1.5 rounded-md transition-colors',
-                    markdownMode === 'editor' ? 'bg-primary-200 text-primary-900' : 'text-primary-500 hover:text-primary-800 hover:bg-primary-100',
-                  )}
-                >
-                  <HugeiconsIcon icon={SourceCodeIcon} size={14} />
-                </button>
-                <button
-                  type="button"
-                  title="Split view"
-                  onClick={() => setMarkdownMode('split')}
-                  className={cn(
-                    'p-1.5 rounded-md transition-colors',
-                    markdownMode === 'split' ? 'bg-primary-200 text-primary-900' : 'text-primary-500 hover:text-primary-800 hover:bg-primary-100',
-                  )}
-                >
-                  <HugeiconsIcon icon={LayoutLeftIcon} size={14} />
-                </button>
-                <button
-                  type="button"
-                  title="Preview only"
-                  onClick={() => setMarkdownMode('preview')}
-                  className={cn(
-                    'p-1.5 rounded-md transition-colors',
-                    markdownMode === 'preview' ? 'bg-primary-200 text-primary-900' : 'text-primary-500 hover:text-primary-800 hover:bg-primary-100',
-                  )}
-                >
-                  <HugeiconsIcon icon={ViewIcon} size={14} />
-                </button>
-              </div>
-            )}
-
-            {openedPath && fileType === 'text' && (
-              <Button size="sm" onClick={handleSave} disabled={!dirty || saving} className="shrink-0 h-7 text-xs gap-1">
-                <HugeiconsIcon icon={FloppyDiskIcon} size={13} />
-                {saving ? 'Saving…' : 'Save'}
-              </Button>
-            )}
-          </header>
-
-          {/* Content area */}
-          <div className="min-h-0 flex-1 overflow-hidden">
-            {!openedPath ? (
-              <div className="flex flex-col items-center justify-center h-full text-primary-400 gap-3">
-                <HugeiconsIcon icon={File01Icon} size={40} strokeWidth={1.2} className="opacity-30" />
-                <div className="text-center">
-                  <p className="text-sm font-medium text-primary-600">No file open</p>
-                  <p className="text-xs text-primary-400 mt-1">Select a file from the tree to start editing.</p>
-                </div>
-              </div>
-            ) : loading ? (
-              <div className="flex flex-col items-center justify-center h-full gap-3 text-primary-400">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent-500 border-r-transparent" />
-                <span className="text-xs">Loading…</span>
-              </div>
-            ) : error ? (
-              <div className="flex flex-col items-center justify-center h-full gap-2 px-8 text-center">
-                <p className="text-sm font-semibold text-rose-600">{error}</p>
-                <p className="text-xs font-mono text-primary-500">/{openedPath}</p>
-              </div>
-            ) : fileType === 'image' ? (
-              <div className="flex items-center justify-center h-full p-8 bg-primary-50 overflow-auto">
-                <img src={fileDataUrl} alt={openedPath} className="max-h-full max-w-full rounded-xl shadow-lg" />
-              </div>
-            ) : isMarkdown ? (
-              <div className="flex h-full min-h-0 overflow-hidden">
-                {markdownMode !== 'preview' && (
-                  <div className={cn('min-h-0 overflow-hidden', markdownMode === 'split' ? 'w-1/2 border-r border-primary-200' : 'w-full')}>
-                    {monacoEditor}
-                  </div>
-                )}
-                {markdownMode !== 'editor' && (
-                  <div className={cn('min-h-0 bg-surface', markdownMode === 'split' ? 'w-1/2' : 'w-full')}>
-                    {markdownPreviewPane}
-                  </div>
-                )}
-              </div>
-            ) : (
-              monacoEditor
-            )}
-          </div>
-        </main>
+          ) : loading ? (
+            <div className="flex items-center justify-center h-full gap-3 text-white/40">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-r-transparent" />
+              <span className="text-xs">Loading…</span>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2 px-8 text-center">
+              <p className="text-sm text-rose-400">{error}</p>
+              <p className="text-xs font-mono text-white/30">/{openedPath}</p>
+            </div>
+          ) : fileType === 'image' ? (
+            <div className="flex items-center justify-center h-full p-8 overflow-auto">
+              <img src={fileDataUrl} alt={openedPath} className="max-h-full max-w-full rounded-lg" />
+            </div>
+          ) : (
+            <CodeMirror
+              ref={cmRef}
+              value={content}
+              onChange={handleChange}
+              theme={oneDark}
+              extensions={extensions}
+              height="100%"
+              style={{ height: '100%' }}
+              basicSetup={{
+                lineNumbers: true,
+                highlightActiveLine: true,
+                highlightActiveLineGutter: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+                foldGutter: true,
+                indentOnInput: true,
+                tabSize: 2,
+              }}
+            />
+          )}
+        </div>
       </div>
     </div>
   )
