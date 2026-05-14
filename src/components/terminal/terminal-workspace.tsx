@@ -18,6 +18,7 @@ import type * as WebLinksAddonModule from 'xterm-addon-web-links'
 import type { DebugAnalysis } from '@/components/terminal/debug-panel'
 import type { TerminalTab } from '@/stores/terminal-panel-store'
 import { DebugPanel } from '@/components/terminal/debug-panel'
+import { NewTerminalDialog } from '@/components/terminal/new-terminal-dialog'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useTerminalPanelStore } from '@/stores/terminal-panel-store'
@@ -135,6 +136,7 @@ export function TerminalWorkspace({
   const [debugAnalysis, setDebugAnalysis] = useState<DebugAnalysis | null>(null)
   const [debugLoading, setDebugLoading] = useState(false)
   const [showDebugPanel, setShowDebugPanel] = useState(false)
+  const [showNewTermDialog, setShowNewTermDialog] = useState(false)
 
   const containerMapRef = useRef(new Map<string, HTMLDivElement>())
   const terminalMapRef = useRef(new Map<string, Terminal>())
@@ -143,6 +145,7 @@ export function TerminalWorkspace({
     new Map<string, ReadableStreamDefaultReader<Uint8Array>>(),
   )
   const connectedRef = useRef(new Set<string>())
+  const pendingCommandRef = useRef(new Map<string, string>())
 
   const activeTab = useMemo(
     function activeTabMemo() {
@@ -339,8 +342,7 @@ export function TerminalWorkspace({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          cwd: DEFAULT_TERMINAL_CWD,
-          // Let the server pick the shell from $SHELL
+          cwd: tab.cwd !== '~' ? tab.cwd : DEFAULT_TERMINAL_CWD,
           cols: terminal.cols,
           rows: terminal.rows,
         }),
@@ -425,6 +427,14 @@ export function TerminalWorkspace({
               setTabSessionId(tab.id, payload.sessionId)
               const nextTitle = tab.cwd === '~' ? tab.title : tab.cwd
               renameTab(tab.id, nextTitle)
+              // Send pending command if set (e.g. from new terminal dialog)
+              const pendingCmd = pendingCommandRef.current.get(tab.id)
+              if (pendingCmd) {
+                pendingCommandRef.current.delete(tab.id)
+                window.setTimeout(function sendCmd() {
+                  void sendInput(tab.id, `${pendingCmd}\r`)
+                }, 300)
+              }
             }
             continue
           }
@@ -532,7 +542,18 @@ export function TerminalWorkspace({
 
   const handleCreateTab = useCallback(
     function handleCreateTab() {
-      const newTabId = createTab(DEFAULT_TERMINAL_CWD)
+      setShowNewTermDialog(true)
+    },
+    [],
+  )
+
+  const handleNewTermConfirm = useCallback(
+    function handleNewTermConfirm({ cwd, command }: { cwd: string; command?: string }) {
+      setShowNewTermDialog(false)
+      const newTabId = createTab(cwd)
+      if (command) {
+        pendingCommandRef.current.set(newTabId, command)
+      }
       window.setTimeout(function focusNewTab() {
         const tab = useTerminalPanelStore
           .getState()
@@ -867,6 +888,13 @@ export function TerminalWorkspace({
           isLoading={debugLoading}
           onRunCommand={handleRunDebugCommand}
           onClose={handleCloseDebugPanel}
+        />
+      ) : null}
+
+      {showNewTermDialog ? (
+        <NewTerminalDialog
+          onConfirm={handleNewTermConfirm}
+          onCancel={() => setShowNewTermDialog(false)}
         />
       ) : null}
 
