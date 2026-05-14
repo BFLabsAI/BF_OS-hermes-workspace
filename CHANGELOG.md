@@ -25,6 +25,68 @@ Cada entrada deve usar um **timestamp ISO 8601 completo** como cabeçalho de se�
 
 ---
 
+## 2026-05-14T10:30:00+02:00 — Terminal: dialog de novo terminal com seletor de diretório e comandos rápidos
+
+**Contexto:** Ao abrir um novo terminal (botão `+`), o terminal sempre abria em `~/.hermes` sem nenhuma opção de configuração. Usuário pediu um popup para escolher o diretório e opcionalmente executar um comando ao abrir.
+
+**Arquivos novos:**
+- `src/components/terminal/new-terminal-dialog.tsx`
+
+**Arquivos modificados:**
+- `src/components/terminal/terminal-workspace.tsx`
+
+**Terminal:**
+- Botão `+` agora abre um modal em vez de criar o tab diretamente
+- Modal tem dois painéis:
+  - **Open in**: grid 3 colunas com 12 diretórios pré-definidos (`~ root`, `hermes-workspace`, `itarget-agents`, `hermes`, `.hermes`, `monorepo`, `agno-api-oficial`, `falcon-crm`, `n8n`, `BF-Second-Brain`, `skills`, `workspace-development`)
+  - **Run command on open** (opcional): chips `claudefast`, `codex`, `opencode`, `npm run dev`, `pnpm dev`
+- Rodapé do modal mostra preview do caminho + comando antes de confirmar
+- `connectTab` agora usa `tab.cwd` em vez do `DEFAULT_TERMINAL_CWD` hardcoded
+- Comando pendente é enviado ao terminal 300ms após a sessão conectar (via `pendingCommandRef`)
+- Tab inicial (ao abrir o workspace) continua abrindo em `~/.hermes` como antes
+
+---
+
+## 2026-05-14T08:55:00+02:00 — Files: fix CSP bloqueando Monaco Editor (loading eterno)
+
+**Contexto:** Monaco carrega seu runtime de `cdn.jsdelivr.net`, mas a CSP do app (`script-src 'self' 'unsafe-inline'`) bloqueava scripts externos. Resultado: Monaco nunca inicializava e todos os arquivos ficavam em "Loading…" para sempre.
+
+**Arquivos modificados:**
+- `src/routes/__root.tsx`
+
+**CSP:**
+- Adicionado `https://cdn.jsdelivr.net` ao `script-src` em `APP_CSP`
+
+---
+
+## 2026-05-14T08:50:00+02:00 — Files: fix symlinks-pra-diretório + folder picker no "New File"
+
+**Contexto:** Symlinks que apontam para diretórios (como `.agent/skills/backend-patterns` → `../../.agents/skills/backend-patterns`) eram classificados como `file` porque `entry.isDirectory()` (de `readdir({withFileTypes:true})`) **não resolve symlinks**. Clicar tentava abrir como arquivo e a leitura caía em `Is a directory`. Além disso, criar arquivo só pedia o nome — usuário pediu uma navegação tipo file dialog para escolher a pasta destino com possibilidade de criar pasta em qualquer nível.
+
+**Arquivos modificados:**
+- `src/routes/api/files.ts`
+- `src/components/file-explorer/file-explorer-sidebar.tsx`
+
+**Arquivos novos:**
+- `src/components/file-explorer/new-file-dialog.tsx`
+
+**API:**
+- `readDirectory` usa `stats.isDirectory()` (do `fs.stat`, que segue symlinks) em vez de `entry.isDirectory()` (que vê o symlink em si). Resultado: symlinks para diretórios agora aparecem como `type: 'folder'` e expandem normalmente
+
+**`NewFileDialog`:**
+- Breadcrumb clicável do caminho atual (`/root` → `.hermes` → `skills` → …), cada segmento navega para aquele nível
+- Lista filtrada só com **subpastas** do diretório atual, clique entra na pasta; botão `..` para voltar
+- Botão "New folder here" expande input inline; cria a pasta via `/api/files` `action=mkdir` e **auto-navega** pra dentro dela
+- Input "File name" com preview do path final que será criado
+- Enter no nome do arquivo dispara Create; Enter no nome da pasta confirma criação
+
+**Sidebar:**
+- `+` no header, "New file" do empty state e "New file" do menu de contexto agora abrem o `NewFileDialog`
+- `initialPath` do dialog vem do alvo do clique direito (pasta clicada → pasta clicada; arquivo clicado → pasta pai); botão do header começa em `/root`
+- Após criar, o sidebar é atualizado e, se `onFileOpen` estiver setado, o arquivo é aberto direto no painel direito
+
+---
+
 ## 2026-05-14T08:15:00+02:00 — Files: abertura inline no painel direito (sem popup)
 
 **Contexto:** O clique em arquivo abria um `FilePreviewDialog` (popup). O usuário quer o conteúdo inline no painel direito da rota `/files`, igual a um VS Code minimalista. Pop-up removido; abertura passa por `onFileOpen` no sidebar.
