@@ -25,6 +25,34 @@ Cada entrada deve usar um **timestamp ISO 8601 completo** como cabeçalho de se�
 
 ---
 
+## 2026-05-14T14:30:00+02:00 — Settings: providers customizados aparecem no dialog compacto + botão Refresh
+
+**Contexto:** OmniRoute (configurado em `custom_providers` no `config.yaml`) não aparecia como card de provider no dialog compacto de Settings (Model & Provider). Os providers hardcoded (`PROVIDER_CARDS`) eram os únicos exibidos. Além disso, ao selecionar um provider, a lista de modelos não exibia as opções do OmniRoute. Dois problemas corrigidos: (1) normalização de casing apagava o ID original do provider; (2) o dialog compacto não consultava os providers dinâmicos.
+
+**Arquivos modificados:**
+- `src/components/settings-dialog/settings-dialog.tsx`
+- `src/screens/settings/providers-screen.tsx`
+
+**Settings dialog compacto (`settings-dialog.tsx`):**
+- `HermesContent` agora busca `/api/models` ao montar → extrai `configuredProviders` e `models`
+- `dynamicCards` = providers em `configuredProviders` que **não** estão no `PROVIDER_CARDS` hardcoded
+- Grid de providers renderiza `allProviderCards = [...PROVIDER_CARDS, ...dynamicCards]`
+- Cards dinâmicos exibem avatar com inicial do nome, contagem de modelos ("20 models") e indicador verde
+- `fetchModelsForProvider` checa `modelsData` primeiro → retorna modelos do OmniRoute sem precisar de endpoint extra
+- Adicionado botão **↻ Refresh** ao lado do label "Model" — re-busca `/api/models` e recarrega lista de modelos do provider ativo
+- Runtime info usa `allProviderCards` para exibir o nome correto de providers dinâmicos
+
+**Settings completo (`providers-screen.tsx`):**
+- `readProviderId` removeu chamada a `normalizeProviderId` — retorna o provider string original (ex.: `'OmniRoute'`, não `'omniroute'`)
+- `buildProviderSummaries` usa Map `lowercase → original` para deduplicação case-insensitive, preservando o casing canônico
+- Provider summaries agora têm `id: 'OmniRoute'` e `name: 'OmniRoute'` correspondendo exatamente ao valor em `config.yaml`
+- Select de provider no `ModelConfigSection` encontra a opção corretamente sem precisar do fallback de "add current value"
+
+**Pontos de atenção:**
+- Dependências do CodeMirror (`@lezer/highlight`, `@codemirror/theme-one-dark`) instaladas via npm por causa do mismatch de store pnpm v10/v11
+
+---
+
 ## 2026-05-14T11:50:00+02:00 — Files: substituição do Monaco pelo CodeMirror 6
 
 **Contexto:** Apesar de várias tentativas (correção da CSP, modo uncontrolled, `key` por arquivo, remoção do `padding`), o Monaco continuava com problemas — cursor invisível em alguns casos, click desalinhado, Enter saltando para a última linha. Decisão: substituir Monaco por CodeMirror 6, que é mais leve, totalmente local (zero CDN) e tem handling de cursor mais previsível.

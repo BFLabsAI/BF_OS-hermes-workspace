@@ -369,29 +369,35 @@ function parseStringList(value: string): Array<string> {
 
 function readProviderId(entry: ModelCatalogEntry): string | null {
   if (typeof entry === 'string') return null
-  const provider = typeof entry.provider === 'string' ? entry.provider : ''
-  const normalized = normalizeProviderId(provider)
-  return normalized || null
+  const provider = typeof entry.provider === 'string' ? entry.provider.trim() : ''
+  return provider || null
 }
 
 function buildProviderSummaries(payload: {
   models?: Array<ModelCatalogEntry>
   configuredProviders?: Array<string>
 }): Array<ProviderSummary> {
+  // Map from lowercase key → original-case canonical value
+  const canonicalId = new Map<string, string>()
   const modelCounts = new Map<string, number>()
 
   for (const entry of payload.models ?? []) {
     const providerId = readProviderId(entry)
     if (!providerId) continue
-
-    const current = modelCounts.get(providerId) ?? 0
-    modelCounts.set(providerId, current + 1)
+    const key = providerId.toLowerCase()
+    if (!canonicalId.has(key)) canonicalId.set(key, providerId)
+    const canon = canonicalId.get(key)!
+    modelCounts.set(canon, (modelCounts.get(canon) ?? 0) + 1)
   }
 
   const configuredSet = new Set<string>()
   for (const providerId of payload.configuredProviders ?? []) {
-    const normalized = normalizeProviderId(providerId)
-    if (normalized) configuredSet.add(normalized)
+    const trimmed = providerId.trim()
+    if (!trimmed) continue
+    const key = trimmed.toLowerCase()
+    // Prefer original-case from configuredProviders if not already seen
+    if (!canonicalId.has(key)) canonicalId.set(key, trimmed)
+    configuredSet.add(canonicalId.get(key)!)
   }
 
   for (const providerId of modelCounts.keys()) {
@@ -406,7 +412,7 @@ function buildProviderSummaries(payload: {
 
     summaries.push({
       id: providerId,
-      name: getProviderDisplayName(providerId),
+      name: metadata?.name || getProviderDisplayName(providerId),
       description:
         metadata?.description ||
         'Configured provider in your local Hermes setup.',

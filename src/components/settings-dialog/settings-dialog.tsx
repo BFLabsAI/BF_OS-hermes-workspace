@@ -256,8 +256,33 @@ function HermesContent() {
     providers: Array<{ id: string; name: string; online: boolean; modelCount: number; configured: boolean; needsRestart: boolean }>
     models: Array<{ id: string; name: string; provider: string }>
   } | null>(null)
+  const [modelsData, setModelsData] = useState<{
+    models: Array<{ id: string; name: string; provider: string }>
+    configuredProviders: Array<string>
+  } | null>(null)
+  const [isRefreshingModels, setIsRefreshingModels] = useState(false)
+
+  const fetchAllModels = useCallback(async () => {
+    setIsRefreshingModels(true)
+    try {
+      const r = await fetch('/api/models')
+      const d = await r.json()
+      if (d.ok) setModelsData(d)
+    } catch {}
+    setIsRefreshingModels(false)
+  }, [])
 
   const fetchModelsForProvider = useCallback((providerId: string) => {
+    // Check modelsData first — covers custom/dynamic providers like OmniRoute
+    if (modelsData) {
+      const fromData = modelsData.models
+        .filter((m) => m.provider === providerId)
+        .map((m) => m.id)
+      if (fromData.length > 0) {
+        setAvailableModels(fromData)
+        return
+      }
+    }
     // For local providers, prefer auto-discovered models first
     if (localDiscovery) {
       const discovered = localDiscovery.models
@@ -280,7 +305,7 @@ function HermesContent() {
         const card = PROVIDER_CARDS.find((p) => p.id === providerId)
         setAvailableModels(card?.models || [])
       })
-  }, [localDiscovery])
+  }, [localDiscovery, modelsData])
 
   useEffect(() => {
     fetch('/api/local-providers')
@@ -288,6 +313,8 @@ function HermesContent() {
       .then((d: any) => { if (d.ok) setLocalDiscovery(d) })
       .catch(() => {})
   }, [])
+
+  useEffect(() => { void fetchAllModels() }, [fetchAllModels])
 
   useEffect(() => {
     fetch('/api/hermes-config')
@@ -362,6 +389,20 @@ function HermesContent() {
     )
   }
 
+  const knownProviderIds = new Set(PROVIDER_CARDS.map((p) => p.id.toLowerCase()))
+  const dynamicCards = (modelsData?.configuredProviders ?? [])
+    .filter((id) => id && !knownProviderIds.has(id.toLowerCase()))
+    .map((id) => ({
+      id,
+      name: id,
+      logo: '',
+      models: (modelsData?.models ?? [])
+        .filter((m) => m.provider === id)
+        .map((m) => m.id),
+      authType: 'api_key' as const,
+    }))
+  const allProviderCards = [...PROVIDER_CARDS, ...dynamicCards]
+
   const cardStyle: React.CSSProperties = {
     backgroundColor: 'var(--theme-card)',
     border: '1px solid var(--theme-border)',
@@ -396,43 +437,54 @@ function HermesContent() {
           Select your AI provider. OAuth providers authenticate via browser.
         </p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {PROVIDER_CARDS.map((p) => {
+          {allProviderCards.map((p) => {
             const isActive = activeProvider === p.id
+            const isDynamic = !PROVIDER_CARDS.some((c) => c.id === p.id)
             const hasKey =
+              isDynamic ||
               p.authType === 'none' ||
               p.authType === 'oauth' ||
-              (p.envKey ? !!configuredKeys[p.envKey] : false)
+              ('envKey' in p && p.envKey ? !!configuredKeys[p.envKey as string] : false)
             return (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => {
-                  if (hasKey) selectProvider(p.id)
+                  setActiveProvider(p.id)
+                  fetchModelsForProvider(p.id)
+                  save({ config: { provider: p.id } })
                 }}
                 className={cn(
                   'flex flex-col items-start gap-1 rounded-xl px-3 py-2.5 text-left transition-all',
                   isActive
                     ? 'ring-2 ring-accent-500 shadow-md'
                     : 'hover:brightness-110',
-                  !hasKey && p.authType === 'api_key' && 'opacity-60',
+                  !hasKey && !isDynamic && p.authType === 'api_key' && 'opacity-60',
                 )}
                 style={cardStyle}
               >
                 <div className="flex w-full items-center justify-between">
-                  <ProviderLogo provider={p.id} size={32} />
+                  {isDynamic ? (
+                    <span className="flex size-8 items-center justify-center rounded-lg bg-accent-500/15 text-sm font-bold text-accent-500">
+                      {p.name.slice(0, 1).toUpperCase()}
+                    </span>
+                  ) : (
+                    <ProviderLogo provider={p.id} size={32} />
+                  )}
                   {isActive && (
                     <span className="size-2 rounded-full bg-green-500" />
                   )}
                   {!isActive && hasKey && (
                     <span className="size-2 rounded-full bg-green-500/40" />
                   )}
-                  {!hasKey && p.authType === 'api_key' && (
+                  {!hasKey && !isDynamic && p.authType === 'api_key' && (
                     <span className="size-2 rounded-full bg-red-500/60" />
                   )}
                 </div>
                 <span className="text-xs font-semibold mt-1">{p.name}</span>
                 <span className="text-[9px]" style={mutedStyle}>
                   {(() => {
+                    if (isDynamic) return `${p.models.length} models`
                     const disc = localDiscovery?.providers.find((lp) => lp.id === p.id)
                     if (disc?.online) return '🟢 Detected'
                     if (p.authType === 'oauth') return 'OAuth'
@@ -449,12 +501,27 @@ function HermesContent() {
       {/* Model Selection for active provider */}
       {activeProvider && (
         <div>
-          <p
-            className="mb-1 text-xs font-semibold uppercase tracking-wider"
-            style={mutedStyle}
-          >
-            Model
-          </p>
+          <div className="mb-1 flex items-center justify-between">
+            <p
+              className="text-xs font-semibold uppercase tracking-wider"
+              style={mutedStyle}
+            >
+              Model
+            </p>
+            <button
+              type="button"
+              disabled={isRefreshingModels}
+              onClick={() => {
+                void fetchAllModels().then(() =>
+                  fetchModelsForProvider(activeProvider),
+                )
+              }}
+              className="rounded-lg px-2 py-0.5 text-[11px] font-medium transition-colors hover:bg-accent-500/10 disabled:opacity-40"
+              style={{ color: 'var(--theme-accent, var(--theme-text))' }}
+            >
+              {isRefreshingModels ? '...' : '↻ Refresh'}
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
             {(() => {
               if (availableModels.length > 0) return availableModels
@@ -463,7 +530,7 @@ function HermesContent() {
                 .filter((m) => m.provider === activeProvider)
                 .map((m) => m.id)
               if (discovered && discovered.length > 0) return discovered
-              return PROVIDER_CARDS.find((p) => p.id === activeProvider)?.models || []
+              return allProviderCards.find((p) => p.id === activeProvider)?.models || []
             })().map((model) => (
               <button
                 key={model}
@@ -669,7 +736,7 @@ function HermesContent() {
           <span className="font-mono font-medium">{activeModel || '—'}</span>
           <span style={mutedStyle}>Provider</span>
           <span className="font-mono font-medium">
-            {PROVIDER_CARDS.find((p) => p.id === activeProvider)?.name ||
+            {allProviderCards.find((p) => p.id === activeProvider)?.name ||
               activeProvider ||
               '—'}
           </span>
