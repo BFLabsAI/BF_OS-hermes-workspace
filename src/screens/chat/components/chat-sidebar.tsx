@@ -11,6 +11,7 @@ import {
   ConsoleIcon,
   DashboardSquare01Icon,
   File01Icon,
+  Folder01Icon,
   MessageMultiple01Icon,
   Moon02Icon,
   PencilEdit02Icon,
@@ -562,6 +563,7 @@ function ChatSidebarComponent({
   const isJobsActive = pathname === '/jobs'
   const isMemoryActive = pathname === '/memory'
   const isTasksActive = pathname === '/tasks'
+  const isProjectsActive = pathname.startsWith('/projects')
   const isConductorActive = pathname === '/conductor'
   const isOperationsActive = pathname === '/operations'
   const isLogsActive = pathname === '/logs'
@@ -800,8 +802,15 @@ function ChatSidebarComponent({
       kind: 'link',
       to: '/tasks',
       icon: CheckListIcon,
-      label: t('nav.tasks'),
+      label: 'Agent Tasks',
       active: isTasksActive,
+    },
+    {
+      kind: 'link',
+      to: '/projects',
+      icon: Folder01Icon,
+      label: 'Projects',
+      active: isProjectsActive,
     },
     {
       kind: 'link',

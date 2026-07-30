@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { TaskPicker } from '@/components/projects/task-picker'
 import type {
   CreateTaskInput,
   KanbanTaskSummary,
@@ -79,6 +80,9 @@ export function TaskDialog({
   const [tenant, setTenant] = useState('')
   const [triage, setTriage] = useState(false)
 
+  // Linked project task (create mode only)
+  const [linkedProjectTaskId, setLinkedProjectTaskId] = useState<string | null>(null)
+
   // Comments tab state
   const [newComment, setNewComment] = useState('')
   const [postingComment, setPostingComment] = useState(false)
@@ -109,6 +113,7 @@ export function TaskDialog({
     }
     setTab('details')
     setNewComment('')
+    setLinkedProjectTaskId(null)
   }, [task, open, defaultStatus])
 
   // Load full task detail when editing for comments/events/runs.
@@ -158,6 +163,10 @@ export function TaskDialog({
       if (parsedSkills.length > 0) input.skills = parsedSkills
       if (tenant.trim()) input.tenant = tenant.trim()
       if (triage) input.triage = true
+      if (linkedProjectTaskId) {
+        // @ts-expect-error — field added by projects feature; may not yet be in CreateTaskInput type
+        input.linked_project_task_id = linkedProjectTaskId
+      }
       await onCreate(input)
     }
   }
@@ -350,6 +359,17 @@ export function TaskDialog({
                   />
                   Start in triage (instead of {defaultStatus ? STATUS_LABELS[defaultStatus] : 'Ready'})
                 </label>
+              )}
+
+              {!isEdit && (
+                <div>
+                  <label className={labelClass}>Linked Project Task</label>
+                  <TaskPicker
+                    value={linkedProjectTaskId}
+                    onChange={setLinkedProjectTaskId}
+                    placeholder="Selecionar task de projeto (opcional)…"
+                  />
+                </div>
               )}
 
               <div className="flex items-center justify-between pt-2">

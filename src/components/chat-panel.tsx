@@ -12,6 +12,7 @@ import {
   Cancel01Icon,
   PencilEdit02Icon,
 } from '@hugeicons/core-free-icons'
+import { TaskPicker } from '@/components/projects/task-picker'
 import { AnimatePresence, motion } from 'motion/react'
 import type { SessionMeta } from '@/screens/chat/types'
 import { ChatScreen } from '@/screens/chat/chat-screen'
@@ -123,6 +124,32 @@ export function ChatPanel() {
   // Simple dropdown state
   const [showSessionList, setShowSessionList] = useState(false)
 
+  // Context chip: linked project task
+  const [linkedTaskId, setLinkedTaskId] = useState<string | null>(null)
+  const [linkedTaskTitle, setLinkedTaskTitle] = useState<string | null>(null)
+  const [showContextPicker, setShowContextPicker] = useState(false)
+
+  const handleLinkedTaskChange = useCallback(async (taskId: string | null) => {
+    setLinkedTaskId(taskId)
+    if (!taskId) {
+      setLinkedTaskTitle(null)
+      setShowContextPicker(false)
+      return
+    }
+    try {
+      const res = await fetch(`/api/project-tasks/${taskId}/context`)
+      if (res.ok) {
+        const data = await res.json() as { title?: string }
+        setLinkedTaskTitle(data.title ?? taskId)
+      } else {
+        setLinkedTaskTitle(taskId)
+      }
+    } catch {
+      setLinkedTaskTitle(taskId)
+    }
+    setShowContextPicker(false)
+  }, [])
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -154,11 +181,39 @@ export function ChatPanel() {
                 <button
                   type="button"
                   onClick={() => setShowSessionList((v) => !v)}
-                  className="text-xs font-medium text-primary-700 hover:text-primary-900 truncate max-w-[200px] transition-colors"
+                  className="text-xs font-medium text-primary-700 hover:text-primary-900 truncate max-w-[160px] transition-colors"
                   title={panelTitle}
                 >
                   {panelTitle}
                 </button>
+                {/* Context chip */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowContextPicker((v) => !v)}
+                    className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border transition-colors shrink-0"
+                    style={linkedTaskId
+                      ? { borderColor: 'var(--theme-accent)', color: 'var(--theme-accent)', background: 'var(--theme-accent-bg,rgba(99,102,241,0.1))' }
+                      : { borderColor: 'var(--theme-border)', color: 'var(--theme-muted)' }
+                    }
+                    title="Selecionar contexto de projeto"
+                  >
+                    🎯 {linkedTaskId ? `Context: ${linkedTaskTitle ?? linkedTaskId}` : 'Context: nenhum'}
+                  </button>
+                  {showContextPicker && (
+                    <div
+                      className="absolute left-0 top-full mt-1 z-50 w-64 rounded-lg border shadow-lg p-3"
+                      style={{ background: 'var(--theme-bg)', borderColor: 'var(--theme-border)' }}
+                    >
+                      <p className="text-[10px] text-[var(--theme-muted)] mb-2">Vincular task de projeto</p>
+                      <TaskPicker
+                        value={linkedTaskId}
+                        onChange={(id) => void handleLinkedTaskChange(id)}
+                        placeholder="Selecionar task…"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-0.5">
                 <TooltipProvider>
